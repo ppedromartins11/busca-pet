@@ -1,9 +1,9 @@
 /*
- * Identidade e sessão da demonstração local.
+ * Contrato BPAuth para Supabase Auth e para a demonstração local legada.
  *
- * Esta abstração imita o contrato de um provedor de identidade, mas não oferece
- * autenticação segura. Senhas e tokens nunca são gravados no armazenamento.
- * Contas, funções e a sessão contêm apenas metadados necessários à interface.
+ * Com o Supabase configurado, a sessão vem do SDK e as funções do banco/RLS.
+ * Sem configuração, o modo legado simula identidade apenas neste navegador;
+ * ele não oferece autenticação segura. Nenhuma senha é gravada pelo modo legado.
  */
 (() => {
   "use strict";
@@ -17,6 +17,326 @@
   const RESET_EMAIL_KEY = C.storage.resetEmail;
   const PUBLIC_ROLES = C.roles.public;
   const ALL_ROLES = C.roles.all;
+  const supabase = window.BPSupabase?.client;
+  if (supabase) {
+    const ONBOARDING_KEY = "buscapet.auth.pending-onboarding.v1";
+    const listeners = new Set();
+    let currentSession = null;
+    let currentUser = null;
+    let recoveryGranted = false;
+    let sessionExpired = false;
+    let authIssue = "";
+    let authEpoch = 0;
+    let explicitAuthOperation = false;
+    const copy = (value) => value == null ? null : JSON.parse(JSON.stringify(value));
+    const normalizedEmail = V.normalizeEmail;
+    const authError = (code, message, details = {}) => Object.assign(Error(message), { code, ...details });
+    const notify = () => {
+      for (const listener of listeners) {
+        try { listener(copy(currentUser)); } catch { authIssue = "Não foi possível atualizar a interface de sessão."; }
+      }
+    };
+    const unwrap = (result, message) => {
+      if (result.error) throw authError(result.error.code || "SUPABASE_ERROR", message || result.error.message);
+      return result.data;
+    };
+    const sessionView = (session) => session ? {
+      userId: session.user.id,
+      createdAt: session.user.created_at,
+      expiresAt: new Date(session.expires_at * 1000).toISOString(),
+      persistent: true,
+    } : null;
+    const setEmpty = (expired = false) => {
+      authEpoch += 1;
+      currentSession = null;
+      currentUser = null;
+      recoveryGranted = false;
+      sessionExpired ||= expired;
+      notify();
+    };
+    const pendingRead = () => {
+      try {
+        const pending = JSON.parse(localStorage.getItem(ONBOARDING_KEY) || "null");
+        if (!pending) return null;
+        if (Date.now() - pending.createdAt > 7 * 86400000) {
+          localStorage.removeItem(ONBOARDING_KEY);
+          return null;
+        }
+        return pending;
+      } catch { return null; }
+    };
+    const pendingWrite = (pending) => {
+      try {
+        if (pending) localStorage.setItem(ONBOARDING_KEY, JSON.stringify(pending));
+        else localStorage.removeItem(ONBOARDING_KEY);
+      } catch { authIssue = "Não foi possível guardar as opções de cadastro neste navegador."; }
+    };
+    async function completeOnboarding(user) {
+      const pending = pendingRead();
+      if (!pending || pending.userId !== user.id || pending.email !== normalizedEmail(user.email)) return;
+      // As opções locais são apenas pedidos: as políticas RLS decidem cada concessão.
+      unwrap(await supabase.from("profiles").update({
+        accepted_terms_at: pending.acceptedAt,
+        accepted_privacy_at: pending.acceptedAt,
+      }).eq("id", user.id), "Não foi possível registrar a aceitação dos termos.");
+      if (pending.roles.includes("colaborador")) {
+        const { error } = await supabase.from("user_roles").insert({ user_id: user.id, role: "colaborador" });
+        if (error && error.code !== "23505") throw authError(error.code || "ROLE_ERROR", "Não foi possível solicitar a função Colaborador.");
+      }
+      if (pending.roles.includes("parceiro") && pending.partner) {
+        const { data: existing, error: lookupError } = await supabase.from("partner_profiles")
+          .select("user_id").eq("user_id", user.id).maybeSingle();
+        if (lookupError) throw authError(lookupError.code || "PARTNER_ERROR", "Não foi possível consultar a solicitação de parceiro.");
+        if (!existing) unwrap(await supabase.from("partner_profiles").insert({
+          user_id: user.id,
+          organization_type: pending.partner.organizationType,
+          public_name: pending.partner.publicName,
+          city: pending.partner.city,
+          region: pending.partner.region,
+          responsible_name: pending.partner.responsible,
+          cnpj: pending.partner.cnpj || null,
+        }), "Não foi possível enviar a solicitação de parceiro.");
+      }
+      if (pending.activeRole === "colaborador")
+        unwrap(await supabase.rpc("switch_active_role", { p_role: "colaborador" }), "Não foi possível ativar a função Colaborador.");
+      pendingWrite(null);
+    }
+    async function hydrate(session, { onboarding = true } = {}) {
+      if (!session) { setEmpty(); return null; }
+      const epoch = authEpoch;
+      const { data: identity, error: identityError } = await supabase.auth.getUser();
+      if (identityError || !identity?.user || identity.user.id !== session.user.id)
+        throw authError(identityError?.code || "SESSION_INVALID", "Sessão inválida. Entre novamente.");
+      if (onboarding) await completeOnboarding(identity.user);
+      const [profileResult, rolesResult, partnerResult] = await Promise.all([
+        supabase.from("profiles").select("id,full_name,active_role,status,created_at").eq("id", identity.user.id).single(),
+        supabase.from("user_roles").select("role").eq("user_id", identity.user.id),
+        supabase.from("partner_profiles").select("organization_type,public_name,city,region,responsible_name,cnpj,status")
+          .eq("user_id", identity.user.id).maybeSingle(),
+      ]);
+      const profile = unwrap(profileResult, "Não foi possível carregar seu perfil.");
+      const roles = unwrap(rolesResult, "Não foi possível carregar suas funções.");
+      const partner = unwrap(partnerResult, "Não foi possível carregar a solicitação de parceiro.");
+      if (epoch !== authEpoch) return copy(currentUser);
+      if (profile.status !== "active") {
+        await supabase.auth.signOut();
+        setEmpty();
+        throw authError("ACCOUNT_SUSPENDED", "Esta conta está suspensa. Consulte a moderação.");
+      }
+      const granted = roles.map((row) => row.role).filter((role) => ALL_ROLES.includes(role));
+      if (!granted.includes(profile.active_role))
+        throw authError("ROLE_INCONSISTENT", "O perfil contém uma função sem concessão válida.");
+      currentSession = sessionView(session);
+      currentUser = {
+        id: identity.user.id,
+        name: profile.full_name,
+        email: identity.user.email,
+        roles: granted,
+        activeRole: profile.active_role,
+        status: profile.status,
+        emailVerified: Boolean(identity.user.email_confirmed_at),
+        createdAt: profile.created_at,
+        partner: partner ? {
+          organizationType: partner.organization_type,
+          publicName: partner.public_name,
+          city: partner.city,
+          region: partner.region,
+          responsible: partner.responsible_name,
+          cnpj: partner.cnpj,
+          status: partner.status,
+        } : null,
+      };
+      notify();
+      return copy(currentUser);
+    }
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") recoveryGranted = true;
+      if (event === "SIGNED_OUT") { setEmpty(); return; }
+      if (explicitAuthOperation && event === "SIGNED_IN") return;
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY") {
+        // A chamada ao Data API deve ocorrer fora do callback do GoTrue.
+        setTimeout(() => hydrate(session).catch((error) => {
+          authIssue = error.message;
+          setEmpty();
+        }), 0);
+      }
+    });
+    const ready = (async () => {
+      try {
+        const data = unwrap(await supabase.auth.getSession(), "Não foi possível recuperar a sessão.");
+        if (data.session) await hydrate(data.session);
+      } catch (error) {
+        authIssue = error.message;
+        setEmpty();
+      }
+    })();
+    async function signIn(email, password) {
+      await ready;
+      let cleanEmail;
+      try { cleanEmail = V.email(email); } catch (error) { throw authError("INVALID_EMAIL", error.message); }
+      if (!String(password || "")) throw authError("INVALID_CREDENTIALS", "Informe sua senha.");
+      explicitAuthOperation = true;
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (error) {
+          if (error.code === "email_not_confirmed")
+            throw authError("EMAIL_UNVERIFIED", "Confirme seu e-mail antes de entrar.", { email: cleanEmail });
+          if (error.code === "invalid_credentials")
+            throw authError("INVALID_CREDENTIALS", "E-mail ou senha inválidos.");
+          if (error.status === 429 || /rate_limit/.test(error.code || ""))
+            throw authError("RATE_LIMIT", "Muitas tentativas. Aguarde antes de entrar novamente.");
+          throw authError("AUTH_UNAVAILABLE", "Não foi possível entrar agora. Tente novamente.");
+        }
+        return await hydrate(data.session);
+      } finally {
+        explicitAuthOperation = false;
+      }
+    }
+    async function signUp(data) {
+      const validation = V.signUpData(data);
+      if (!validation.valid) throw authError("VALIDATION_ERROR", "Revise os campos indicados.", { fields: validation.errors });
+      const password = V.password(data.password);
+      const redirect = `${location.origin}${location.pathname}#login`;
+      explicitAuthOperation = true;
+      try {
+        const result = await supabase.auth.signUp({
+          email: validation.email, password,
+          options: { data: { full_name: validation.name }, emailRedirectTo: redirect },
+        });
+        if (result.error) {
+          if (["user_already_exists", "email_exists"].includes(result.error.code))
+            throw authError("EMAIL_IN_USE", "Se este e-mail já estiver cadastrado, entre ou recupere sua senha.");
+          throw authError(result.error.code || "SIGNUP_ERROR", result.error.message);
+        }
+        if (!result.data.user) throw authError("SIGNUP_ERROR", "Não foi possível concluir o cadastro.");
+        pendingWrite({
+          userId: result.data.user.id,
+          email: validation.email,
+          roles: validation.roles,
+          activeRole: data.activeRole,
+          partner: validation.roles.includes("parceiro") ? data.partner : null,
+          acceptedAt: new Date().toISOString(),
+          createdAt: Date.now(),
+        });
+        if (result.data.session) return { ...(await hydrate(result.data.session)), needsEmailConfirmation: false };
+        return {
+          id: result.data.user.id, name: validation.name, email: validation.email,
+          roles: [], activeRole: null, status: "active", emailVerified: false,
+          needsEmailConfirmation: true,
+        };
+      } finally {
+        explicitAuthOperation = false;
+      }
+    }
+    async function signOut() {
+      unwrap(await supabase.auth.signOut(), "Não foi possível encerrar a sessão.");
+      setEmpty();
+    }
+    async function requestPasswordReset(email) {
+      let cleanEmail;
+      try { cleanEmail = V.email(email); } catch (error) { throw authError("INVALID_EMAIL", error.message); }
+      const redirectTo = `${location.origin}${location.pathname}?auth=reset`;
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
+      if (error) throw authError(error.code || "RESET_ERROR", "Não foi possível solicitar a recuperação agora. Tente novamente.");
+      return { message: "Se houver uma conta vinculada a esse e-mail, enviaremos as instruções para redefinir a senha." };
+    }
+    async function updatePassword(password, confirmation) {
+      await ready;
+      if (!recoveryGranted) throw authError("TOKEN_INVALID", "Abra o link válido de recuperação enviado por e-mail.");
+      let cleanPassword;
+      try { cleanPassword = V.password(password); } catch (error) { throw authError("WEAK_PASSWORD", error.message); }
+      if (cleanPassword !== String(confirmation || "")) throw authError("PASSWORD_MISMATCH", "As senhas precisam ser iguais.");
+      unwrap(await supabase.auth.updateUser({ password: cleanPassword }), "Não foi possível alterar a senha. Solicite um novo link.");
+      recoveryGranted = false;
+      await signOut();
+      return { changed: true };
+    }
+    async function setActiveRole(role) {
+      if (!currentUser) throw authError("SESSION_REQUIRED", "Entre para continuar.");
+      if (!currentUser.roles.includes(role)) throw authError("ROLE_NOT_ALLOWED", "Esta função não foi concedida à sua conta.");
+      unwrap(await supabase.rpc("switch_active_role", { p_role: role }), "Não foi possível trocar de função.");
+      await refresh();
+      return role;
+    }
+    async function addRole(role, partner = null) {
+      if (!currentUser) throw authError("SESSION_REQUIRED", "Entre para continuar.");
+      if (role === "colaborador") {
+        if (!currentUser.roles.includes(role)) {
+          const { error } = await supabase.from("user_roles").insert({ user_id: currentUser.id, role });
+          if (error && error.code !== "23505") throw authError(error.code || "ROLE_ERROR", "Não foi possível solicitar a função.");
+        }
+      } else if (role === "parceiro" && partner) {
+        unwrap(await supabase.from("partner_profiles").insert({
+          user_id: currentUser.id, organization_type: partner.organizationType,
+          public_name: partner.publicName, city: partner.city, region: partner.region,
+          responsible_name: partner.responsible, cnpj: partner.cnpj || null,
+        }), "Não foi possível enviar a solicitação de parceiro.");
+      } else throw authError("ROLE_NOT_PUBLIC", "Esta função exige um fluxo de concessão autorizado.");
+      return refresh();
+    }
+    async function updateEmail(email) {
+      if (!currentUser) throw authError("SESSION_REQUIRED", "Entre para continuar.");
+      let cleanEmail;
+      try { cleanEmail = V.email(email); } catch (error) { throw authError("INVALID_EMAIL", error.message); }
+      unwrap(await supabase.auth.updateUser({ email: cleanEmail }), "Não foi possível solicitar a alteração do e-mail.");
+      return refresh();
+    }
+    async function resendVerification(email) {
+      let cleanEmail;
+      try { cleanEmail = V.email(email); } catch (error) { throw authError("INVALID_EMAIL", error.message); }
+      unwrap(await supabase.auth.resend({ type: "signup", email: cleanEmail,
+        options: { emailRedirectTo: `${location.origin}${location.pathname}#login` },
+      }), "Não foi possível reenviar o e-mail agora.");
+      return { message: "Se o cadastro estiver pendente, enviaremos outro e-mail de confirmação." };
+    }
+    async function refresh() {
+      const { data } = await supabase.auth.getSession();
+      return hydrate(data?.session);
+    }
+    const getSession = () => {
+      if (currentSession && Date.parse(currentSession.expiresAt) <= Date.now()) setEmpty(true);
+      return copy(currentSession);
+    };
+    const getUser = () => copy(currentUser);
+    const getRoles = () => [...(currentUser?.roles || [])];
+    const getActiveRole = () => currentUser?.activeRole || null;
+    const hasRole = (role) => getRoles().includes(role);
+    const hasAnyRole = (roles) => roles.some(hasRole);
+    const requireSession = () => {
+      const session = getSession();
+      if (!session) throw authError("SESSION_REQUIRED", "Entre para continuar.");
+      return session;
+    };
+    const requireRole = (role) => {
+      requireSession();
+      if (!hasRole(role) || getActiveRole() !== role)
+        throw authError("ROLE_REQUIRED", "Esta área não está disponível para a função ativa.");
+      return true;
+    };
+    window.BPAuth = {
+      ready, initialize: () => ready, onChange(callback) {
+        listeners.add(callback);
+        return () => listeners.delete(callback);
+      },
+      PUBLIC_ROLES: [...PUBLIC_ROLES],
+      signIn, signUp, signOut, requestPasswordReset, updatePassword,
+      getSession, getUser, getCurrentUser: getUser, getRoles, getActiveRole,
+      hasRole, hasAnyRole, requireSession, requireRole, setActiveRole,
+      addRole, updateEmail, resendVerification, refresh,
+      canResetPassword: () => recoveryGranted,
+      removeRole: async () => { throw authError("ROLE_NOT_ALLOWED", "A remoção de função ainda não está disponível."); },
+      verifyEmail: () => { throw authError("EMAIL_VERIFICATION_REQUIRED", "Confirme seu e-mail pelo link recebido."); },
+      setAccountStatus: async (id, status) => {
+        requireSession();
+        unwrap(await supabase.rpc("set_account_status", { p_user: id, p_status: status }), "Não foi possível alterar o status da conta.");
+      },
+      validateSignUp: V.signUpData, normalizeEmail: normalizedEmail,
+      issue: () => authIssue,
+      consumeSessionExpired: () => { const expired = sessionExpired; sessionExpired = false; return expired; },
+      _accounts: () => currentUser ? [copy(currentUser)] : [],
+    };
+    return;
+  }
   const SESSION_DURATION = 12 * 60 * 60 * 1000;
   const ephemeralPasswords = new Map();
   const demoPasswords = new Map([

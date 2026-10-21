@@ -120,23 +120,29 @@
     issue = "",
     corrupt = false,
     baseline = null;
-  try {
-    const stored = Storage.readRaw(localStorage, KEY);
-    if (!stored.ok) throw stored.error;
-    baseline = stored.value;
-    state = R.migrate(baseline ? JSON.parse(baseline) : seed());
-  } catch (error) {
-    state = seed();
-    if (
-      error instanceof SyntaxError ||
-      error.message === "Dados incompatíveis"
-    ) {
-      corrupt = true;
-      issue =
-        "Os dados salvos não puderam ser lidos. Exportar dados preserva o conteúdo original. Use “Restaurar exemplos” somente depois de guardar uma cópia.";
-    } else
-      issue =
-        "O navegador bloqueou o armazenamento. Os registros ficarão apenas nesta sessão.";
+  if (window.BPSupabase?.configured) {
+    // O modo conectado não lê nem persiste os registros fictícios do protótipo.
+    state = { ...seed(), accounts: [], alerts: [], sightings: [], tasks: [],
+      participations: [], reports: [], audit: [], favorites: [] };
+  } else {
+    try {
+      const stored = Storage.readRaw(localStorage, KEY);
+      if (!stored.ok) throw stored.error;
+      baseline = stored.value;
+      state = R.migrate(baseline ? JSON.parse(baseline) : seed());
+    } catch (error) {
+      state = seed();
+      if (
+        error instanceof SyntaxError ||
+        error.message === "Dados incompatíveis"
+      ) {
+        corrupt = true;
+        issue =
+          "Os dados salvos não puderam ser lidos. Exportar dados preserva o conteúdo original. Use “Restaurar exemplos” somente depois de guardar uma cópia.";
+      } else
+        issue =
+          "O navegador bloqueou o armazenamento. Os registros ficarão apenas nesta sessão.";
+    }
   }
   function save(next, force = false) {
     if (corrupt && !force)

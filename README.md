@@ -1,83 +1,58 @@
-# BuscaPet — protótipo local refatorado
+# BuscaPet — MVP acadêmico
 
-Protótipo acadêmico para organizar buscas por animais perdidos. Versão 0.5 com
-preparação da Sprint 2, 20/10/2026.
+SPA em JavaScript e Vite para publicar e acompanhar buscas por animais. Com `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`, usa Supabase Auth, PostgreSQL com RLS e o bucket privado `pet-media`. Sem essas variáveis, abre o protótipo local legado, explicitamente identificado como demonstração.
 
-Esta versão preserva os fluxos da entrega 0.4 e reorganiza o código por responsabilidade. A interface continua em HTML, CSS e JavaScript puro, agora com Vite, SDK oficial do Supabase, cliente configurável por ambiente e migrations locais ainda não aplicadas.
+## Iniciar o modo conectado
 
-## Abrir o projeto
+Requer Node.js 22 ou superior. Em PowerShell:
 
-Na pasta do projeto, execute:
-
-```bash
-npm install
-npm run dev
+```powershell
+npm.cmd ci
+Copy-Item .env.example .env.local
+npm.cmd run dev -- --host 127.0.0.1
 ```
 
-Abra a URL exibida pelo Vite (normalmente `http://localhost:5173`). Enquanto
-`.env` não for configurado, o projeto permanece no modo demonstrativo local.
+Abra a URL impressa pelo Vite. `.env.example` contém apenas URL e chave pública do projeto `jpnvizdhyrvliqgvyxzx`. `.env.local` e `.env` são ignorados pelo Git. Jamais coloque `service_role`, secret key, senha de banco ou segredo de Worker em variáveis `VITE_` ou arquivos do frontend. Reinicie o servidor após mudar o ambiente.
 
-Node.js 22 ou superior é necessário para desenvolvimento e verificações:
+Configure manualmente **Authentication → URL Configuration** no projeto Supabase para o host e a porta usados pelo Vite. O cadastro retorna para `/#login` e a recuperação de senha usa `/?auth=reset`. A confirmação de e-mail e o envio de mensagens dependem da configuração de Auth/SMTP hospedada. Consulte [o roteiro da apresentação](docs/DEMO_PROFESSOR.md) antes de cadastrar uma conta de teste.
 
-```bash
-npm test
-npm run check
-```
+## O que funciona no modo conectado
 
-O teste de navegador usa Playwright como ferramenta externa de QA e um Chrome/Chromium instalado; Playwright não faz parte da aplicação nem do ZIP de entrega.
+- Cadastro, login, sessão persistente, logout, pedido de recuperação e redefinição por Supabase Auth, conforme a configuração de e-mail do projeto.
+- Feed público e detalhe de ocorrências, com pesquisa por texto e filtros.
+- Animais próprios: cadastro, listagem, detalhe, edição e exclusão confirmada.
+- Ocorrências: publicação, detalhe, edição e alteração de situação pelo responsável.
+- Fotografias: validação até 5 MiB, upload para bucket privado e leitura autorizada, sem URL pública permanente.
+- Avistamento por usuário autenticado e leitura pelo responsável autorizado.
 
-## Contas demonstrativas
+A autorização efetiva depende dos grants, das políticas RLS e das RPCs da migration. O frontend nunca recebe chave privilegiada. Os testes locais não substituem a homologação de escrita e isolamento com duas identidades no projeto remoto.
 
-Todas usam a senha exclusiva da demonstração `BuscaPetDemo!`:
+O relato de visitante **sem conta** ainda depende de Cloudflare Worker, Turnstile e Edge Function, que não foram publicados. Favoritos, tarefas, denúncias e moderação não possuem persistência no schema atual e aparecem como recursos indisponíveis no modo conectado. Nenhum dado fictício do protótipo é exibido como ocorrência remota.
 
-| Conta | E-mail | Função |
-|---|---|---|
-| Tutor | `tutor@demo.buscapet` | Tutor |
-| Colaborador | `colaborador@demo.buscapet` | Colaborador |
-| Moderador | `moderador@demo.buscapet` | Moderador, concedido por seed |
+## Modo local de contingência
 
-O cadastro público permite Tutor, Colaborador e Parceiro. Tutor e Colaborador podem coexistir na mesma identidade e sessão. Moderador e Administrador não são concedidos pelo cadastro público.
+Sem `.env` e `.env.local` com as variáveis `VITE_SUPABASE_*`, reinicie o Vite. O aviso visual identifica o **protótipo local**, cujos dados ficam neste navegador. As contas fictícias abaixo usam somente a senha de demonstração `BuscaPetDemo!`:
 
-## Comportamento preservado
-
-- Cadastro, login, verificação, recuperação e redefinição simulados.
-- Uma identidade com várias funções autorizadas e uma única função ativa.
-- Guards de rota com retorno ao destino solicitado e tela de acesso limitado.
-- Painéis de Tutor, Colaborador, Parceiro e Moderador.
-- Alertas, favoritos, fotos, rascunhos, pistas, revisão humana, participantes e tarefas.
-- Encerramento, reabertura, histórico, denúncias, contestação, moderação e suspensão.
-- Exportação, exclusão, restauração dos exemplos e cartaz para impressão.
-- Migração v2→v3, preservação de conteúdo corrompido para exportação, quota e conflito entre abas.
-- Navegação por teclado, foco por rota, `aria-live`, layout responsivo e `prefers-reduced-motion`.
-
-## Limites da demonstração
-
-Não há autenticação segura, backend, banco central ou provedor de e-mail. Senha, confirmação e token nunca são gravados. Credenciais de contas criadas existem apenas na memória da página e deixam de funcionar após recarregar.
-
-As permissões locais mantêm a interface coerente, mas não protegem dados contra alguém que controla o navegador. Uma operação real ainda exige backend, autorização no servidor, armazenamento privado, política de retenção e auditoria protegida. Não use dados pessoais nem senhas reais.
-
-## Estrutura principal
-
-| Caminho | Responsabilidade |
+| Papel | E-mail |
 |---|---|
-| `index.html` | Metadados, entrada do Vite e estrutura global mínima |
-| `style.css` | Sistema visual, componentes, responsividade e impressão |
-| `src/constants.js` | Papéis, rótulos, estados, versões e chaves |
-| `src/storage.js` | Acesso seguro a armazenamento, JSON, cópia e limpeza por prefixo |
-| `src/validation.js` | Normalização, validações do domínio e migração |
-| `src/auth.js` | Identidade e sessão demonstrativas, a migrar para Auth real |
-| `src/supabase-client.js` | Cliente oficial configurado por variáveis públicas do Vite |
-| `src/main.js` | Entrada ESM que preserva a ordem de inicialização dos módulos |
-| `src/permissions.js` | Função ativa e autorização por ação/recurso |
-| `src/store.js` | Transações e operações do domínio |
-| `src/router.js` | Parse de hash, metadados e guards |
-| `src/images.js` | Validação, redução e estado transitório de fotos |
-| `src/views.js` | Componentes de apresentação e escape de conteúdo |
-| `src/app.js` | Telas, formulários e controladores da aplicação |
-| `src/events.js` | Registro único dos eventos globais |
-| `src/legal.js` | Minutas acadêmicas exibidas pela aplicação |
-| `tests/` | Testes de acesso, identidade, domínio e navegador |
-| `docs/REFATORACAO.md` | Diagnóstico, decisões, remoções e comparação |
-| `docs/SUPABASE.md` | Configuração, segurança e aplicação futura da Sprint 2 |
+| Tutor | `tutor@demo.buscapet` |
+| Colaborador | `colaborador@demo.buscapet` |
+| Moderador | `moderador@demo.buscapet` |
 
-Consulte também [docs/ARQUITETURA.md](docs/ARQUITETURA.md), [docs/SUPABASE.md](docs/SUPABASE.md), [docs/TESTES.md](docs/TESTES.md) e [docs/ROTEIRO.md](docs/ROTEIRO.md).
+Esse modo simula cadastro, login, pistas, tarefas, denúncias e moderação. Não oferece autenticação ou colaboração segura entre dispositivos. Não use dados pessoais nem senhas reais nele.
+
+## Verificações
+
+```powershell
+npm.cmd run check
+npm.cmd test
+npm.cmd run build
+```
+
+Com Vite conectado já iniciado e Chrome/Edge disponível, `npm.cmd run test:browser:real` testa rotas públicas, guarda de rota privada, ausência de seeds, teclado e larguras de 360 a 1440 px. Ele faz uma tentativa de login inválido, sem criar contas ou dados. Para repetir o teste de navegador do protótipo local, inicie um servidor sem as variáveis Supabase e execute `npm.cmd run test:browser` com `BASE_URL` apontando para ele. Os resultados remotos e os limites de Auth estão em [MVP_HOMOLOGACAO_20261021.md](docs/MVP_HOMOLOGACAO_20261021.md).
+
+## Código e documentação
+
+`src/auth.js` preserva a API `BPAuth`; `src/remote-store.js` reúne as operações de Data API e Storage; `src/real-app.js` apresenta o modo conectado; `src/store.js` e `src/app.js` preservam o protótipo offline; `src/events.js` escolhe o modo. A migration está em `supabase/migrations/20261020233414_initial_buscapet_schema.sql`.
+
+Veja [DEMO_PROFESSOR.md](docs/DEMO_PROFESSOR.md), [ARQUITETURA.md](docs/ARQUITETURA.md), [HOMOLOGACAO_MIGRATION.md](docs/HOMOLOGACAO_MIGRATION.md) e [SPRINT2_2_INGRESS.md](docs/SPRINT2_2_INGRESS.md). Parte da documentação anterior descreve o estado histórico da Sprint 2; este README descreve os dois modos atuais da SPA.
