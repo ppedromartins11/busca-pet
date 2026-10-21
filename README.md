@@ -23,6 +23,7 @@ Configure manualmente **Authentication → URL Configuration** no projeto Supaba
 - Animais próprios: cadastro, listagem, detalhe, edição e exclusão confirmada.
 - Ocorrências: publicação, detalhe, edição e alteração de situação pelo responsável.
 - Fotografias: validação até 5 MiB, upload para bucket privado e leitura autorizada, sem URL pública permanente.
+- Fotos privadas do animal, tema claro/escuro/automático e painel de acessibilidade estão implementados localmente. A persistência de fotos de animais requer a migration incremental descrita em [FINALIZACAO_MVP_20261021.md](docs/FINALIZACAO_MVP_20261021.md), ainda não aplicada remotamente.
 - Avistamento por usuário autenticado e leitura pelo responsável autorizado.
 
 A autorização efetiva depende dos grants, das políticas RLS e das RPCs da migration. O frontend nunca recebe chave privilegiada. Os testes locais não substituem a homologação de escrita e isolamento com duas identidades no projeto remoto.
@@ -56,3 +57,5 @@ Com Vite conectado já iniciado e Chrome/Edge disponível, `npm.cmd run test:bro
 `src/auth.js` preserva a API `BPAuth`; `src/remote-store.js` reúne as operações de Data API e Storage; `src/real-app.js` apresenta o modo conectado; `src/store.js` e `src/app.js` preservam o protótipo offline; `src/events.js` escolhe o modo. A migration está em `supabase/migrations/20261020233414_initial_buscapet_schema.sql`.
 
 Veja [DEMO_PROFESSOR.md](docs/DEMO_PROFESSOR.md), [ARQUITETURA.md](docs/ARQUITETURA.md), [HOMOLOGACAO_MIGRATION.md](docs/HOMOLOGACAO_MIGRATION.md) e [SPRINT2_2_INGRESS.md](docs/SPRINT2_2_INGRESS.md). Parte da documentação anterior descreve o estado histórico da Sprint 2; este README descreve os dois modos atuais da SPA.
+
+O relatório atualizado, limitações, configuração externa e checklist da apresentação estão em [FINALIZACAO_MVP_20261021.md](docs/FINALIZACAO_MVP_20261021.md).

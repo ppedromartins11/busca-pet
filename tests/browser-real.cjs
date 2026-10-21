@@ -30,6 +30,14 @@ const chrome = process.env.CHROME_PATH || [
       0,
       "alertas semeados do protótipo apareceram no modo real",
     );
+    const accessibility = page.getByRole("button", { name: "Abrir opções de acessibilidade" });
+    await accessibility.click();
+    const accessibilityDialog = page.locator("#accessibility-dialog");
+    await accessibilityDialog.getByLabel("Escolha de cor").selectOption("dark");
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await accessibilityDialog.getByRole("button", { name: "Restaurar preferências" }).click();
+    assert.equal(await page.locator("html").getAttribute("data-theme-preference"), "system");
+    await page.keyboard.press("Escape");
     assert.equal(
       await page.getByText("Contas da demonstração", { exact: false }).count(),
       0,
@@ -45,7 +53,7 @@ const chrome = process.env.CHROME_PATH || [
       services: "Rede de apoio",
       sobre: "Sobre o BuscaPet",
     };
-    for (const width of [320, 360, 390, 768, 1024, 1200, 1440]) {
+    for (const width of [320, 360, 375, 390, 430, 768, 820, 1024, 1280, 1440, 1920]) {
       await page.setViewportSize({ width, height: 900 });
       for (const [route, heading] of Object.entries(routeHeadings)) {
         await page.goto(base + "/#" + route, { waitUntil: "domcontentloaded" });
@@ -77,6 +85,7 @@ const chrome = process.env.CHROME_PATH || [
           await toggle.focus();
           await page.keyboard.press("Enter");
           assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+          assert.equal(await page.locator('#real-mobile-nav a[href="#home"]').evaluate((element) => document.activeElement === element), true);
           assert.equal(await page.locator('#real-mobile-nav a[href="#registro"]').isVisible(), true);
           const menu = await page.locator("#real-mobile-nav").boundingBox();
           const strip = await page.locator(".demo-strip").boundingBox();

@@ -11,6 +11,24 @@
       name="description"
       content="BuscaPet: consulte alertas, registre animais e compartilhe avistamentos com segurança."
     />
+    <script>
+      (() => {
+        try {
+          const preferences = JSON.parse(localStorage.getItem("bp.ui.preferences") || "{}");
+          const theme = preferences.theme || "system";
+          const resolved = theme === "system"
+            ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+            : theme;
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.dataset.themePreference = theme;
+          if (preferences.contrast) document.documentElement.dataset.contrast = "high";
+          if (preferences.links) document.documentElement.dataset.links = "highlighted";
+          if (preferences.focus) document.documentElement.dataset.focus = "enhanced";
+          if (preferences.reduceMotion) document.documentElement.dataset.motion = "reduced";
+          if (Number.isFinite(preferences.textScale)) document.documentElement.style.setProperty("--user-text-scale", String(preferences.textScale));
+        } catch { document.documentElement.dataset.theme = "light"; }
+      })();
+    </script>
     <title>BuscaPet | Organize a busca</title>
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="/src/main.js"></script>

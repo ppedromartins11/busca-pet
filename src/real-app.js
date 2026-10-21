@@ -192,24 +192,44 @@
     if (ticket !== generation) return;
     setPage(shell("Meus animais", "Cadastre e atualize os animais sob sua responsabilidade.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a></div>${rows.length ? `<div class="alert-grid">${rows.map((row) => `<article class="pet"><div class="pet-body"><span class="tag">${species[row.species]}</span><h3>${esc(row.name)}</h3><p>${esc(row.breed || "Raça não informada")}</p><div class="actions"><a class="btn secondary small" href="${url("animal", row.id)}">Ver detalhes</a><a class="btn secondary small" href="${url("editar-animal", row.id)}">Editar</a></div></div></article>`).join("")}</div>` : empty("Nenhum animal cadastrado", "Comece pelo cadastro de um animal.")}`), "Meus animais");
   }
+  async function showPetPhotos(petId, ticket, targetId) {
+    const target = document.querySelector(`#${targetId}`);
+    if (!target) return;
+    try {
+      const rows = await D.listPetPhotos(petId);
+      if (ticket !== generation || !document.querySelector(`#${targetId}`)) return;
+      target.dataset.count = String(rows.length);
+      if (!rows.length) { target.innerHTML = '<p class="hint">Nenhuma fotografia cadastrada.</p>'; return; }
+      target.innerHTML = "";
+      for (const row of rows) {
+        const blob = await D.downloadPhoto(row.storage_path);
+        if (ticket !== generation) return;
+        const source = URL.createObjectURL(blob);
+        photos.push(source);
+        target.insertAdjacentHTML("beforeend", `<figure><img src="${source}" alt="Foto privada de animal" loading="lazy">${row.is_cover ? '<figcaption>Foto de capa</figcaption>' : ""}<div class="actions"><button type="button" class="btn secondary small" data-action="set-pet-cover" data-id="${esc(row.id)}" ${row.is_cover ? "disabled" : ""}>Usar como capa</button><button type="button" class="btn danger small" data-action="delete-pet-photo" data-id="${esc(row.id)}">Excluir</button></div></figure>`);
+      }
+    } catch { target.innerHTML = '<p class="hint">Não foi possível carregar as fotos privadas.</p>'; }
+  }
   async function petForm(id, ticket) {
     const row = id ? await D.getPet(id) : null;
     if (ticket !== generation) return;
     if (id && !row) return unavailable("Animal indisponível");
-    setPage(shell(id ? "Editar animal" : "Cadastrar animal", "Dados visíveis somente para você nesta área.", `<form class="form form-page" id="real-pet-form" data-id="${esc(id || "")}"><div class="form-grid"><label>Nome ou identificação *<input class="control" name="name" value="${esc(row?.name || "")}" maxlength="80" required></label><label>Espécie *<select class="control" name="species" required>${Object.entries(species).map(([key, label]) => `<option value="${key}" ${row?.species === key ? "selected" : ""}>${label}</option>`).join("")}</select></label><label>Raça<input class="control" name="breed" value="${esc(row?.breed || "")}" maxlength="120"></label><label>Sexo<select class="control" name="sex"><option value="">Não informado</option><option value="female" ${row?.sex === "female" ? "selected" : ""}>Fêmea</option><option value="male" ${row?.sex === "male" ? "selected" : ""}>Macho</option><option value="unknown" ${row?.sex === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Porte<select class="control" name="size"><option value="">Não informado</option><option value="small" ${row?.size === "small" ? "selected" : ""}>Pequeno</option><option value="medium" ${row?.size === "medium" ? "selected" : ""}>Médio</option><option value="large" ${row?.size === "large" ? "selected" : ""}>Grande</option><option value="unknown" ${row?.size === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Pelagem<input class="control" name="coat_description" value="${esc(row?.coat_description || "")}" maxlength="500"></label><label class="full">Características marcantes<textarea class="control" name="distinctive_features" maxlength="500">${esc(row?.distinctive_features || "")}</textarea></label></div><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">Salvar animal</button><a class="btn secondary" href="#meus-animais">Cancelar</a></div></form>`, true), id ? "Editar animal" : "Cadastrar animal");
+    setPage(shell(id ? "Editar animal" : "Cadastrar animal", "Dados visíveis somente para você nesta área.", `<form class="form form-page" id="real-pet-form" data-id="${esc(id || "")}"><div class="form-grid"><label>Nome ou identificação *<input class="control" name="name" value="${esc(row?.name || "")}" maxlength="80" required></label><label>Espécie *<select class="control" name="species" required>${Object.entries(species).map(([key, label]) => `<option value="${key}" ${row?.species === key ? "selected" : ""}>${label}</option>`).join("")}</select></label><label>Raça<input class="control" name="breed" value="${esc(row?.breed || "")}" maxlength="120"></label><label>Sexo<select class="control" name="sex"><option value="">Não informado</option><option value="female" ${row?.sex === "female" ? "selected" : ""}>Fêmea</option><option value="male" ${row?.sex === "male" ? "selected" : ""}>Macho</option><option value="unknown" ${row?.sex === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Porte<select class="control" name="size"><option value="">Não informado</option><option value="small" ${row?.size === "small" ? "selected" : ""}>Pequeno</option><option value="medium" ${row?.size === "medium" ? "selected" : ""}>Médio</option><option value="large" ${row?.size === "large" ? "selected" : ""}>Grande</option><option value="unknown" ${row?.size === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Pelagem<input class="control" name="coat_description" value="${esc(row?.coat_description || "")}" maxlength="500"></label><label class="full">Características marcantes<textarea class="control" name="distinctive_features" maxlength="500">${esc(row?.distinctive_features || "")}</textarea></label><label class="full">Fotografias<input class="control" id="pet-photo-input" type="file" name="pet_photos" accept="image/jpeg,image/png,image/webp" multiple><span class="hint">Foto de capa e até quatro fotos adicionais. JPEG, PNG ou WebP, até 5 MiB por arquivo.</span></label><div class="photo-preview-list full" id="pet-photo-preview" aria-live="polite"></div></div>${id ? '<section><h2 class="section-heading">Fotos cadastradas</h2><div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div></section>' : ""}<p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">Salvar animal</button><a class="btn secondary" href="#meus-animais">Cancelar</a></div></form>`, true), id ? "Editar animal" : "Cadastrar animal");
+    if (id) void showPetPhotos(id, ticket, "pet-photo-gallery");
   }
   async function petDetail(id, ticket) {
     const row = await D.getPet(id);
     if (ticket !== generation) return;
     if (!row) return unavailable("Animal indisponível");
-    setPage(shell(row.name, "Cadastro privado do animal.", `<dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button><a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
+    setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button><a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
+    void showPetPhotos(id, ticket, "pet-photo-gallery");
   }
   async function occurrenceForm(id, type, ticket) {
     const [pets, row] = await Promise.all([D.listOwnPets(), id ? D.getOccurrence(id) : Promise.resolve(null)]);
     if (ticket !== generation) return;
     if (id && (!row || row.reporter_id !== user()?.id)) return unavailable("Alerta indisponível");
     const kind = row?.type || (type === "found" ? "found" : "lost");
-    setPage(shell(id ? "Editar alerta" : types[kind], "Informe apenas localização aproximada. A foto é opcional.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="full">Foto opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
+    setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Reutilizar as fotos privadas do animal selecionado nesta ocorrência.</span></label><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
   }
   async function dashboard(ticket) {
     const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
@@ -221,7 +241,7 @@
     const row = await D.getOccurrence(id);
     if (ticket !== generation) return;
     if (!row || row.status !== "active" || row.visibility !== "public") return unavailable("Este alerta não recebe avistamentos");
-    setPage(shell("Registrar avistamento", "Descreva o local aproximado e o momento da observação.", `<p class="notice">O envio sem conta ainda está indisponível. Você está entrando com sua conta para registrar esta pista.</p><form class="form" id="real-sighting-form" data-id="${esc(id)}"><label>Área aproximada *<input class="control" name="area_description" maxlength="200" required></label><label>Data e hora *<input class="control" type="datetime-local" name="observed_at" value="${nowLocal()}" max="${nowLocal()}" required></label><label>Descrição *<textarea class="control" name="description" minlength="5" maxlength="2000" required></textarea></label><p class="hint">Não inclua endereço residencial ou dados de terceiros. Coordenadas exatas não serão coletadas neste formulário.</p><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Enviar avistamento</button></form>`, true), "Registrar avistamento");
+    setPage(shell("Registrar avistamento", "Descreva o local aproximado e o momento da observação.", `<p class="notice">O envio sem conta ainda está indisponível. Você está entrando com sua conta para registrar esta pista.</p><form class="form" id="real-sighting-form" data-id="${esc(id)}"><label>Área aproximada *<input class="control" name="area_description" maxlength="200" required></label><label>Quando você viu o animal? *<input class="control" type="datetime-local" name="observed_at" value="${nowLocal()}" max="${nowLocal()}" required><span class="hint">Você pode informar qualquer data e horário anterior ao momento atual.</span></label><button type="button" class="btn secondary small" data-action="sighting-now">Vi o animal agora</button><label>Descrição *<textarea class="control" name="description" minlength="5" maxlength="2000" required></textarea></label><p class="hint">Não inclua endereço residencial ou dados de terceiros. Coordenadas exatas não serão coletadas neste formulário.</p><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Enviar avistamento</button></form>`, true), "Registrar avistamento");
   }
   function account() {
     const current = user();
@@ -323,7 +343,17 @@
       } else if (form.id === "real-pet-form") {
         const data = Object.fromEntries(["name", "species", "breed", "sex", "size", "coat_description", "distinctive_features"].map((key) => [key, formValue(form, key)]));
         const row = form.dataset.id ? await D.updatePet(form.dataset.id, data) : await D.createPet(data);
-        message("Animal salvo.");
+        const selected = [...(form.elements.pet_photos.files || [])];
+        const existing = Number(document.querySelector("#pet-photo-gallery")?.dataset.count || 0);
+        if (existing + selected.length > 5) throw Error("Cada animal pode ter até cinco fotografias.");
+        const prepared = [];
+        for (const file of selected) prepared.push(await preparePhoto(file));
+        let uploadFailure = "";
+        for (const file of prepared) {
+          try { await D.uploadPetPhoto(row.id, file); }
+          catch (error) { uploadFailure = fail(error); break; }
+        }
+        message(uploadFailure ? `Animal salvo, mas uma foto não foi enviada: ${uploadFailure}` : "Animal salvo.");
         navigate(url("animal", row.id));
       } else if (form.id === "real-occurrence-form") {
         const amount = Number(formValue(form, "reward") || 0);
@@ -333,6 +363,10 @@
         const selected = form.elements.photo.files?.[0];
         const file = selected ? await preparePhoto(selected) : null;
         const row = form.dataset.id ? await D.updateOccurrence(form.dataset.id, data) : await D.createOccurrence(data);
+        if (!form.dataset.id && form.elements.reuse_pet_photos?.checked && data.pet_id) {
+          try { await D.reusePetPhotosForOccurrence(data.pet_id, row.id); }
+          catch (error) { notice = `Alerta salvo, mas as fotos do animal não foram reutilizadas: ${fail(error)}`; }
+        }
         if (file) {
           try { await D.uploadOccurrencePhoto(row.id, file); }
           catch (error) { notice = `Alerta salvo, mas a foto não foi enviada: ${fail(error)}`; }
@@ -341,7 +375,10 @@
         notice = "";
         navigate(url("pet", row.id));
       } else if (form.id === "real-sighting-form") {
-        await D.createSighting({ occurrence_id: form.dataset.id, observed_at: new Date(formValue(form, "observed_at")).toISOString(), area_description: formValue(form, "area_description"), description: formValue(form, "description") });
+        const observed = new Date(formValue(form, "observed_at"));
+        if (!Number.isFinite(observed.getTime()) || observed.getTime() > Date.now() + 60_000)
+          throw Error("A data e a hora do avistamento não podem estar no futuro.");
+        await D.createSighting({ occurrence_id: form.dataset.id, observed_at: observed.toISOString(), area_description: formValue(form, "area_description"), description: formValue(form, "description") });
         message("Avistamento registrado para o responsável.");
         navigate(url("pet", form.dataset.id));
       }
@@ -362,6 +399,7 @@
       menu.hidden = !menu.hidden;
       toggle.setAttribute("aria-expanded", String(!menu.hidden));
       toggle.setAttribute("aria-label", menu.hidden ? "Abrir menu" : "Fechar menu");
+      if (!menu.hidden) menu.querySelector("a")?.focus();
       return;
     }
     const target = event.target.closest("[data-action]");
@@ -384,6 +422,17 @@
         notice = "Sessão encerrada.";
         void render();
       } else if (action === "retry") void render();
+      else if (action === "sighting-now") {
+        const input = target.closest("form")?.elements.observed_at;
+        if (input) { input.value = nowLocal(); input.max = nowLocal(); input.focus(); }
+      } else if (action === "set-pet-cover") {
+        await D.setPetCover(target.dataset.id);
+        void render();
+      } else if (action === "delete-pet-photo") {
+        await D.deletePetPhoto(target.dataset.id);
+        message("Foto removida.");
+        void render();
+      }
       else if (action === "resend-email") {
         const email = user()?.email || verificationEmail;
         if (email) await A.resendVerification(email);
@@ -429,6 +478,30 @@
       message("Função ativa atualizada.");
       void render();
     }).catch((error) => { message(fail(error)); void render(); });
+    if (event.target.id === "pet-photo-input") {
+      const preview = document.querySelector("#pet-photo-preview");
+      if (!preview) return;
+      preview.innerHTML = "";
+      const selected = [...event.target.files];
+      if (selected.length > 5) { message("Escolha no máximo cinco fotos."); event.target.value = ""; return; }
+      for (const file of selected) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { message("Use JPEG, PNG ou WebP com até 5 MiB por foto."); event.target.value = ""; preview.innerHTML = ""; return; }
+        const source = URL.createObjectURL(file);
+        photos.push(source);
+        preview.insertAdjacentHTML("beforeend", `<figure><img src="${source}" alt="Prévia de ${esc(file.name)}"><figcaption>${esc(file.name)}</figcaption></figure>`);
+      }
+    }
+    if (event.target.id === "occurrence-pet") {
+      const hint = document.querySelector("#occurrence-pet-hint");
+      const form = event.target.closest("form");
+      const description = form?.elements.description;
+      if (!event.target.value) { if (hint) hint.textContent = "O animal precisa pertencer à sua conta."; return; }
+      D.getPet(event.target.value).then((pet) => {
+        if (!pet || event.target.value !== pet.id) return;
+        if (description && !description.value.trim()) description.value = [pet.name, pet.breed, pet.coat_description, pet.distinctive_features].filter(Boolean).join(" · ");
+        if (hint) hint.textContent = `Dados de ${pet.name} carregados. Marque a opção abaixo para reutilizar as fotos.`;
+      }).catch((error) => { if (hint) hint.textContent = fail(error); });
+    }
   }
   function onKeydown(event) {
     if (event.key === "Escape" && !document.querySelector("#real-mobile-nav")?.hidden) closeMobileMenu(true);

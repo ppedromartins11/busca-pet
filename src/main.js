@@ -12,6 +12,8 @@ import "./router.js";
 import "./legal.js";
 import "./images.js";
 import "./views.js";
+import "./ui-preferences.js";
 import "./app.js";
 import "./real-app.js";
 import "./events.js";
+window.BPUIPreferences?.mount();

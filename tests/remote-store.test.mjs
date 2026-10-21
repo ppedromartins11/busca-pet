@@ -121,3 +121,26 @@ test("empty coordinate input cannot silently become zero degrees", async () => {
     { code: "VALIDATION" });
   assert.equal(calls.some((call) => call.kind === "rpc"), false);
 });
+
+test("sighting rejects a future observation before it reaches Supabase", async () => {
+  const { client, calls } = clientMock();
+  await assert.rejects(createRemoteStore(client).createSighting({
+    occurrence_id: OCCURRENCE_ID,
+    observed_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    area_description: "Centro", description: "Vi um animal parecido.",
+  }), { code: "VALIDATION" });
+  assert.equal(calls.some((call) => call.table === "sightings" && call.action === "insert"), false);
+});
+
+test("pet photographs use the authenticated private folder and metadata", async () => {
+  const { client, calls } = clientMock();
+  const file = new Blob(["image"]);
+  Object.defineProperty(file, "type", { value: "image/webp" });
+  await createRemoteStore(client).uploadPetPhoto(PET_ID, file);
+  const upload = calls.find((call) => call.kind === "upload");
+  const metadata = calls.find((call) => call.table === "pet_photos");
+  assert.match(upload.path, new RegExp(`^${USER_ID}/[0-9a-f-]{36}\\.webp$`));
+  assert.equal(metadata.payload.pet_id, PET_ID);
+  assert.equal(metadata.payload.uploaded_by, USER_ID);
+  assert.equal(metadata.payload.storage_path, upload.path);
+});

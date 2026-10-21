@@ -223,7 +223,7 @@ const BASE = process.env.BASE_URL || "http://localhost:8000";
     "cartaz/" + id,
   ];
   const overflow = [];
-  for (const width of [320, 390, 768, 1024, 1440]) {
+  for (const width of [320, 360, 375, 390, 430, 768, 820, 1024, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     for (const route of routes) {
       await go(route);
@@ -347,7 +347,7 @@ const BASE = process.env.BASE_URL || "http://localhost:8000";
           "alternância de função",
           "logout",
         ],
-        widths: [320, 390, 768, 1024, 1440],
+        widths: [320, 360, 375, 390, 430, 768, 820, 1024, 1280, 1440, 1920],
         routes: routes.length,
         overflow,
         errors,

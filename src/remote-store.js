@@ -50,6 +50,13 @@ function dateTime(value, label) {
   return new Date(timestamp).toISOString();
 }
 
+function pastDateTime(value, label) {
+  const normalized = dateTime(value, label);
+  if (Date.parse(normalized) > Date.now() + 60_000)
+    problem("VALIDATION", `${label} não pode estar no futuro.`);
+  return normalized;
+}
+
 function safeError(error) {
   if (error instanceof RemoteStoreError) return error;
   const code = String(error?.code || "");
@@ -127,7 +134,7 @@ function cleanSighting(input) {
   if (!input || typeof input !== "object") problem("VALIDATION", "Dados do avistamento inválidos.");
   return {
     occurrence_id: requiredUuid(input.occurrence_id, "Ocorrência"),
-    observed_at: dateTime(input.observed_at, "Data"),
+    observed_at: pastDateTime(input.observed_at, "Data e hora do avistamento"),
     area_description: requiredText(input.area_description, "Área", 2, 200),
     direction: optionalText(input.direction, "Direção", 200),
     behavior: optionalText(input.behavior, "Comportamento", 300),
@@ -287,8 +294,60 @@ export function createRemoteStore(client) {
     async listPhotos(occurrenceId) {
       return checked(configured().from("occurrence_photos").select().eq("occurrence_id", requiredUuid(occurrenceId, "Ocorrência")).order("created_at", { ascending: true }));
     },
+    async listPetPhotos(petId) {
+      await currentUser();
+      return checked(configured().from("pet_photos").select().eq("pet_id", requiredUuid(petId, "Animal")).order("is_cover", { ascending: false }).order("created_at", { ascending: true }));
+    },
+    async uploadPetPhoto(petId, file) {
+      const { id } = await currentUser();
+      const extension = validPhoto(file);
+      const path = `${id}/${crypto.randomUUID()}.${extension}`;
+      const bucket = configured().storage.from(BUCKET);
+      await checked(bucket.upload(path, file, { contentType: file.type, upsert: false }));
+      try {
+        return await one(configured().from("pet_photos").insert({
+          pet_id: requiredUuid(petId, "Animal"), uploaded_by: id, storage_path: path,
+          mime_type: file.type, byte_size: file.size,
+        }).select(), "Fotografia");
+      } catch (error) {
+        try { await checked(bucket.remove([path])); }
+        catch { throw new RemoteStoreError("PARTIAL", "A foto não foi associada e a limpeza do arquivo falhou.", { storagePath: path }); }
+        throw safeError(error);
+      }
+    },
+    async setPetCover(photoId) {
+      const { id } = await currentUser();
+      const photo = await one(configured().from("pet_photos").select("id,pet_id,uploaded_by").eq("id", requiredUuid(photoId, "Fotografia")), "Fotografia");
+      if (photo.uploaded_by !== id) problem("DENIED", "Somente o tutor pode alterar a foto de capa.");
+      await checked(configured().from("pet_photos").update({ is_cover: false }).eq("pet_id", photo.pet_id).eq("uploaded_by", id));
+      return one(configured().from("pet_photos").update({ is_cover: true }).eq("id", photo.id).select(), "Fotografia");
+    },
+    async deletePetPhoto(photoId) {
+      const { id } = await currentUser();
+      const photo = await one(configured().from("pet_photos").select("id,uploaded_by,storage_path").eq("id", requiredUuid(photoId, "Fotografia")), "Fotografia");
+      if (photo.uploaded_by !== id) problem("DENIED", "Somente quem enviou a foto pode excluí-la.");
+      const removed = await checked(configured().from("pet_photos").delete().eq("id", photo.id).select("id"));
+      if (!removed?.length) problem("NOT_FOUND", "Fotografia não encontrada ou sem permissão.");
+      try { await checked(configured().storage.from(BUCKET).remove([photo.storage_path])); }
+      catch { throw new RemoteStoreError("PARTIAL", "Metadados excluídos, mas o arquivo privado requer limpeza.", { storagePath: photo.storage_path }); }
+      return true;
+    },
     async uploadOccurrencePhoto(occurrenceId, file) {
       return api.uploadPhoto({ occurrenceId, file });
+    },
+    async reusePetPhotosForOccurrence(petId, occurrenceId) {
+      const { id } = await currentUser();
+      const photos = await api.listPetPhotos(petId);
+      if (!photos.length) return [];
+      const rows = photos.slice(0, 5).map((photo) => ({
+        occurrence_id: requiredUuid(occurrenceId, "Ocorrência"),
+        sighting_id: null,
+        uploaded_by: id,
+        storage_path: photo.storage_path,
+        mime_type: photo.mime_type,
+        byte_size: photo.byte_size,
+      }));
+      return checked(configured().from("occurrence_photos").insert(rows).select());
     },
     async uploadPhoto({ occurrenceId = null, sightingId = null, file } = {}) {
       const { id } = await currentUser();

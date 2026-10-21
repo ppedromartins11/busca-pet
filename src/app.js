@@ -973,6 +973,7 @@
       menu.hidden = !menu.hidden;
       toggle.setAttribute("aria-expanded", String(!menu.hidden));
       toggle.setAttribute("aria-label", menu.hidden ? "Abrir menu" : "Fechar menu");
+      if (!menu.hidden) menu.querySelector("a")?.focus();
       return;
     }
     if (
