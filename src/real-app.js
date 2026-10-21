@@ -1,4 +1,6 @@
 /* Interface conectada: dados reais via publishable key, Auth e RLS. */
+import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-map.js";
+
 (() => {
   "use strict";
   const A = window.BPAuth;
@@ -17,6 +19,9 @@
   let notice = "";
   let verificationEmail = "";
   let messageTimer;
+  let mapController = null;
+  let mapMode = "real";
+  let mapFilters = { "last-known": true, sighting: true, support: true, partner: true };
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -75,6 +80,10 @@
     URL.revokeObjectURL(source);
     photos = photos.filter((current) => current !== source);
   }
+  function destroyMap() {
+    if (mapController) mapController.destroy();
+    mapController = null;
+  }
   function navigate(hash) {
     if (location.hash === hash) void render();
     else location.hash = hash;
@@ -88,6 +97,7 @@
     const logged = Boolean(user());
     const links = [
       ["home", "Início", "home"],
+      ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
       ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
     ];
@@ -120,8 +130,66 @@
   function shell(heading, intro, content, narrow = false) {
     return `<div class="page ${narrow ? "narrow" : ""}"><div class="page-title"><div><h1>${esc(heading)}</h1>${intro ? `<p class="intro">${esc(intro)}</p>` : ""}</div></div>${content}</div>`;
   }
+  function mapFilterControl(category) {
+    const meta = MAP_CATEGORY_META[category];
+    return `<label class="map-filter"><input type="checkbox" data-map-filter="${category}" ${mapFilters[category] ? "checked" : ""}><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><span>${meta.label}</span></label>`;
+  }
+  function mapPointItem(point, index) {
+    const meta = MAP_CATEGORY_META[point.category];
+    return `<li><button type="button" class="map-point-item" data-action="focus-map-point" data-id="${esc(point.id)}"><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><span><b>${esc(index ? point.title : "Última região conhecida")}</b><small>${esc(point.region)}${point.time ? ` · ${esc(point.time)}` : ""}</small></span></button></li>`;
+  }
+  function supportPointItem(point) {
+    const meta = MAP_CATEGORY_META[point.category];
+    return `<article><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><div><h3>${esc(point.title)}</h3><p>${esc(point.region)}</p><small>${esc(meta.label)} · ${esc(point.state)}</small><p>${esc(point.description)}</p></div></article>`;
+  }
+  function legacyCombinedMapPage() {
+    destroyMap();
+    const points = mapMode === "demo" ? DEMO_MAP_POINTS : [];
+    const timeline = points.filter((point) => point.category === "last-known" || point.category === "sighting");
+    const support = points.filter((point) => point.category === "support" || point.category === "partner");
+    setPage(shell("Mapa e rede de apoio", "Consulte somente localizações aproximadas explicitamente autorizadas.", `<section class="map-academic-notice" role="note"><b>SIMULAÇÃO ACADÊMICA</b><span>Os pontos exibidos no cenário demonstrativo são fictícios e servem exclusivamente para demonstrar a funcionalidade.</span></section><div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados reais disponíveis</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Cenário demonstrativo</button></div>${mapMode === "real" ? '<p class="notice">Não há coordenadas públicas autorizadas para exibir no momento. A lista textual permanece vazia para evitar inferir localizações a partir de dados privados.</p>' : '<p class="notice">Modo demonstração ativo: nenhum ponto abaixo foi carregado do Supabase, do feed público ou das estatísticas reais.</p>'}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${Object.keys(MAP_CATEGORY_META).map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de pontos aproximados"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A posição do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline" aria-labelledby="map-timeline-heading"><h2 id="map-timeline-heading">Linha do tempo${mapMode === "demo" ? " demonstrativa" : ""}</h2>${timeline.length ? `<ol>${timeline.map(mapPointItem).join("")}</ol>` : '<p>Nenhum ponto público autorizado para esta linha do tempo.</p>'}</aside></div><section class="map-text-list" aria-labelledby="map-points-heading"><h2 id="map-points-heading">Lista textual dos pontos</h2>${points.length ? `<ul>${points.map((point) => `<li><b>${esc(MAP_CATEGORY_META[point.category].label)}:</b> ${esc(point.title)} — ${esc(point.region)}${point.time ? ` (${esc(point.time)})` : ""}. ${esc(point.state)}.</li>`).join("")}</ul>` : '<p>Nenhum ponto geográfico real pode ser mostrado sem autorização pública.</p>'}</section><section class="map-support" aria-labelledby="map-support-heading"><h2 id="map-support-heading">Rede de apoio${mapMode === "demo" ? " demonstrativa" : ""}</h2>${support.length ? `<div>${support.map(supportPointItem).join("")}</div>` : '<p>Quando houver colaboradores ou parceiros autorizados para divulgação, eles aparecerão aqui com região aproximada e contato verificado.</p>'}</section>`, false), "Mapa e rede de apoio");
+    const target = document.querySelector("#search-map");
+    if (!target) return;
+    mapController = createSearchMap(target, { onTilesError: () => {
+      const status = document.querySelector("#map-tiles-status");
+      if (status) status.textContent = "Não foi possível carregar o fundo do mapa. A lista textual de pontos continua disponível.";
+    } });
+    mapController.setPoints(points, mapFilters);
+    requestAnimationFrame(() => mapController?.invalidateSize());
+  }
+  // The map intentionally has a separate experience from the support directory.
+  // This declaration supersedes the legacy combined renderer above while retaining
+  // its implementation in the file for a safe, incremental migration.
+  function mapPage() {
+    destroyMap();
+    const points = mapMode === "demo" ? DEMO_MAP_POINTS.filter((point) =>
+      point.category === "last-known" || point.category === "sighting") : [];
+    const timeline = points.filter((point) => point.category === "last-known" || point.category === "sighting");
+    setPage(shell("Mapa da busca", "Acompanhe avistamentos e descubra onde concentrar as buscas.", `${mapMode === "demo" ? '<p class="demo-disclaimer" role="note">Exemplo ilustrativo — os pontos não representam avistamentos reais.</p>' : ""}<div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados da busca</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Ver exemplo ilustrativo</button></div>${mapMode === "real" ? '<p class="notice">Ainda não há pontos registrados para esta busca.</p>' : ""}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${["last-known", "sighting"].map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de pontos aproximados"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A posição do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline" aria-labelledby="map-timeline-heading"><h2 id="map-timeline-heading">Linha do tempo</h2>${timeline.length ? `<ol>${timeline.map(mapPointItem).join("")}</ol>` : '<p>Ainda não há avistamentos para esta busca.</p>'}</aside></div><section class="map-text-list" aria-labelledby="map-points-heading"><h2 id="map-points-heading">Pontos da busca</h2>${points.length ? `<ul>${points.map((point) => `<li><b>${esc(MAP_CATEGORY_META[point.category].label)}:</b> ${esc(point.title)} — ${esc(point.region)}${point.time ? ` (${esc(point.time)})` : ""}.</li>`).join("")}</ul>` : '<p>Quando um ponto público for registrado, ele aparecerá aqui.</p>'}</section>`, false), "Mapa da busca");
+    const target = document.querySelector("#search-map");
+    if (!target) return;
+    mapController = createSearchMap(target, { onTilesError: () => {
+      const status = document.querySelector("#map-tiles-status");
+      if (status) status.textContent = "Não foi possível carregar o fundo do mapa. A lista textual de pontos continua disponível.";
+    } });
+    mapController.setPoints(points, mapFilters);
+    requestAnimationFrame(() => mapController?.invalidateSize());
+  }
+  function servicesPage() {
+    destroyMap();
+    setPage(shell("Rede de apoio", "Encontre formas seguras de ajudar e fortaleça a busca na sua comunidade.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Divulgue o alerta na região indicada, confira pontos próximos com segurança e informe um avistamento com data, horário e referência.</p></div><a class="btn primary" href="#mapa">${icon("map")}Ver pontos no mapa</a></section><section class="support-categories" aria-label="Categorias de apoio"><article>${icon("search")}<h2>Divulgação local</h2><p>Compartilhe o alerta em grupos de bairro, condomínios e comércios, sempre usando as informações públicas.</p></article><article>${icon("paw")}<h2>Busca em campo</h2><p>Ajude a percorrer a região em horários combinados. Não entre em locais privados nem se exponha a riscos.</p></article><article>${icon("heart")}<h2>Acolhimento temporário</h2><p>Se encontrar um animal, mantenha-o em segurança e registre a ocorrência para aproximar o tutor.</p></article></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Colaboradores e parceiros</h2><p>Não há colaboradores, clínicas veterinárias ou pet shops cadastrados para exibição no momento. Quando um contato autorizar a divulgação, ele aparecerá nesta página.</p><h2>Orientações para apoiar um tutor</h2><p>Evite publicar endereço residencial, telefone ou localização exata. Compartilhe somente a referência informada no alerta e encaminhe pistas pelo BuscaPet.</p></section>`, false), "Rede de apoio");
+  }
   function alertCard(item) {
     return `<article class="pet"><div class="photo" data-alert-photo="${esc(item.id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto disponível</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${types[item.type]}</span><span class="tag">${states[item.status] || "Situação indisponível"}</span></div><h3>${types[item.type]}</h3><p class="pet-description">${esc(item.description)}</p><p class="pet-location">${icon("pin")} ${esc(item.region)}<span>${esc(item.city)}</span></p>${item.public_reference ? `<p class="hint">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>${fmtDate(item.last_seen_at)}</span></div><div class="card-footer"><span>Alerta da comunidade</span><b>Ver alerta</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${types[item.type]} em ${esc(item.city)}"></a></article>`;
+  }
+  function photoDiagnostic(phase, photo, error = null) {
+    console.error("[BuscaPet][foto]", {
+      phase, occurrenceId: photo?.occurrence_id || null, storagePath: photo?.storage_path || null,
+      httpStatus: error?.status ?? null, code: error?.code ?? null,
+      source: error?.source ?? "browser-image", blobType: error?.blobType ?? null,
+      blobSize: error?.blobSize ?? null,
+      cause: error?.message || String(error || "Imagem não pôde ser decodificada."),
+    });
   }
   function alertPhotoPlaceholder(target, text) {
     target.innerHTML = `<span class="photo-placeholder">${icon("paw")}<small>${esc(text)}</small></span>`;
@@ -130,8 +198,7 @@
     if (!rows.length) return;
     let metadata;
     try { metadata = await D.listPublicCoverPhotos(rows.map((row) => row.id)); }
-    catch { return; }
-    if (ticket !== generation) return;
+    catch (error) { photoDiagnostic("metadata", null, error); return; }
     const covers = new Map();
     for (const photo of metadata) if (!covers.has(photo.occurrence_id)) covers.set(photo.occurrence_id, photo);
     const targets = [...document.querySelectorAll("[data-alert-photo]")]
@@ -146,9 +213,8 @@
         void (async () => {
           try {
             const blob = await D.downloadPhoto(photo.storage_path);
-            if (ticket !== generation || !target.isConnected) return;
+            if (!target.isConnected) return;
             const source = URL.createObjectURL(blob);
-            photos.push(source);
             const image = document.createElement("img");
             image.className = "alert-cover";
             image.alt = "Foto do alerta de animal";
@@ -157,12 +223,16 @@
             image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
             image.addEventListener("error", () => {
               discardPhoto(source);
-              alertPhotoPlaceholder(target, "Foto indisponível");
+              photoDiagnostic("decode", photo, Error("O navegador não conseguiu decodificar a imagem."));
+              if (target.isConnected) alertPhotoPlaceholder(target, "Foto indisponível");
             }, { once: true });
+            if (!target.isConnected) { URL.revokeObjectURL(source); return; }
+            photos.push(source);
             image.src = source;
             target.replaceChildren(image);
-          } catch {
-            if (ticket === generation && target.isConnected) alertPhotoPlaceholder(target, "Foto indisponível");
+          } catch (error) {
+            photoDiagnostic("download-or-decode", photo, error);
+            if (target.isConnected) alertPhotoPlaceholder(target, "Foto indisponível");
           } finally {
             active -= 1;
             next();
@@ -177,9 +247,13 @@
       next();
     };
     if (!("IntersectionObserver" in window)) { targets.forEach(enqueue); return; }
+    const targetRecords = new Map(targets.map((entry) => [entry.target, entry]));
     const observer = new IntersectionObserver((entries) => {
-      if (ticket !== generation) { observer.disconnect(); return; }
-      for (const entry of entries) if (entry.isIntersecting) { observer.unobserve(entry.target); enqueue(entry); }
+      for (const entry of entries) if (entry.isIntersecting) {
+        observer.unobserve(entry.target);
+        const record = targetRecords.get(entry.target);
+        if (record) enqueue(record);
+      }
     }, { rootMargin: "600px 0px" });
     targets.forEach((entry) => observer.observe(entry.target));
   }
@@ -202,7 +276,7 @@
     const mine = row.reporter_id === user()?.id;
     const canReport = row.status === "active" && row.visibility === "public";
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
-    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions">${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${canReport && !user() ? '<p class="hint">O envio sem conta está temporariamente indisponível até a publicação do ingresso protegido.</p>' : ""}${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${canReport && !user() ? '<p class="hint">O envio sem conta está temporariamente indisponível até a publicação do ingresso protegido.</p>' : ""}${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
   }
@@ -232,7 +306,7 @@
     } catch { /* A própria RLS pode limitar os registros. */ }
   }
   function authPage(heading, intro, form) {
-    setPage(`<div class="auth-page"><section class="auth-form-panel"><a class="logo auth-logo" href="#home">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><div class="auth-heading"><h1>${esc(heading)}</h1><p>${esc(intro)}</p></div>${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ""}${form}</section><aside class="auth-context"><img src="assets/hex.png" alt="Cão ilustrativo"><div><p class="eyebrow">BuscaPet</p><h2>Uma conta para acompanhar suas buscas.</h2><p>Autenticação e dados protegidos pelo Supabase.</p></div></aside></div>`, heading);
+    setPage(`<div class="auth-page"><section class="auth-form-panel"><a class="logo auth-logo" href="#home">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><div class="auth-heading"><h1>${esc(heading)}</h1><p>${esc(intro)}</p></div>${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ""}${form}</section><aside class="auth-context"><img src="assets/hex.png" alt="Cão ilustrativo"><div><p class="eyebrow">BuscaPet</p><h2>Uma conta para acompanhar suas buscas.</h2><p>Organize alertas e receba pistas da comunidade.</p></div></aside></div>`, heading);
     notice = "";
   }
   const password = (name, label, autocomplete) => `<label>${label}<span class="password-control"><input class="control" type="password" name="${name}" autocomplete="${autocomplete}" required><button class="password-toggle" type="button" data-action="toggle-password" aria-label="Mostrar ${label.toLowerCase()}">Mostrar</button></span></label>`;
@@ -240,7 +314,7 @@
     authPage("Entre no BuscaPet", "Use seu e-mail e senha.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>`);
   }
   function registration() {
-    authPage("Crie sua conta", "Cadastro real para o MVP acadêmico.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="collaborator"><span>Também quero colaborar em buscas.</span></label><label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
+    authPage("Crie sua conta", "Cadastre-se para publicar e acompanhar alertas.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="collaborator"><span>Também quero colaborar em buscas.</span></label><label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
   }
   function forgot() {
     authPage("Recuperar senha", "Se houver uma conta para este e-mail, enviaremos instruções.", `<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><p class="form-error" role="alert"></p><p class="form-success" role="status"></p><button class="btn primary" type="submit">Enviar instruções</button><a href="#login">Voltar ao login</a></form>`);
@@ -328,6 +402,7 @@
   async function render() {
     const ticket = ++generation;
     releasePhotos();
+    destroyMap();
     let { route, id } = routeInfo();
     setPage(shell("Carregando", "Consultando dados autorizados…", "", true), "Carregando");
     try {
@@ -342,8 +417,10 @@
         navigate("#login");
         return;
       }
-      chrome(route);
+      chrome(route === "map" ? "mapa" : route);
       if (route === "home") await home(ticket);
+      else if (route === "mapa" || route === "map") mapPage();
+      else if (route === "services") servicesPage();
       else if (route === "pet") await detail(id, ticket);
       else if (route === "login") login();
       else if (route === "registro") registration();
@@ -471,7 +548,14 @@
     if (!target) return;
     const action = target.dataset.action;
     try {
-      if (action === "toggle-password") {
+      if (action === "map-mode") {
+        mapMode = target.dataset.mode === "demo" ? "demo" : "real";
+        mapPage();
+      } else if (action === "focus-map-point") {
+        if (!mapController?.focus(target.dataset.id)) message("Este ponto não está visível com os filtros atuais.");
+      } else if (action === "use-location") {
+        mapController?.locate({ onSuccess: () => message("Localização usada somente neste mapa; ela não foi salva."), onError: message });
+      } else if (action === "toggle-password") {
         const input = target.parentElement.querySelector("input");
         const show = input.type === "password";
         input.type = show ? "text" : "password";
@@ -537,6 +621,11 @@
     }
   }
   function onChange(event) {
+    if (event.target.dataset.mapFilter) {
+      mapFilters[event.target.dataset.mapFilter] = event.target.checked;
+      if (mapController) mapController.setPoints(mapMode === "demo" ? DEMO_MAP_POINTS : [], mapFilters);
+      return;
+    }
     if (event.target.id === "real-type") { filters.type = event.target.value; void render(); }
     if (event.target.id === "real-status") { filters.status = event.target.value; void render(); }
     if (event.target.id === "real-role") A.setActiveRole(event.target.value).then(() => {

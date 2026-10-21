@@ -60,15 +60,19 @@ function pastDateTime(value, label) {
 function safeError(error) {
   if (error instanceof RemoteStoreError) return error;
   const code = String(error?.code || "");
+  const details = {
+    status: error?.status ?? error?.statusCode ?? null,
+    source: error?.name || "supabase",
+  };
   if (code === "42501" || code === "PGRST301" || code === "403")
-    return new RemoteStoreError("DENIED", "Você não tem permissão para esta operação.");
+    return new RemoteStoreError("DENIED", "Você não tem permissão para esta operação.", details);
   if (code === "23503")
-    return new RemoteStoreError("DEPENDENCY", "Este registro possui vínculos que impedem a operação.");
+    return new RemoteStoreError("DEPENDENCY", "Este registro possui vínculos que impedem a operação.", details);
   if (code === "23505")
-    return new RemoteStoreError("CONFLICT", "Este registro já existe.");
+    return new RemoteStoreError("CONFLICT", "Este registro já existe.", details);
   if (code === "23514" || code === "22P02" || code === "PGRST204")
-    return new RemoteStoreError("VALIDATION", "Revise os dados informados.");
-  return new RemoteStoreError("UNAVAILABLE", "Não foi possível concluir a operação. Tente novamente.");
+    return new RemoteStoreError("VALIDATION", "Revise os dados informados.", details);
+  return new RemoteStoreError("UNAVAILABLE", "Não foi possível concluir a operação. Tente novamente.", details);
 }
 
 async function checked(request) {
@@ -388,7 +392,12 @@ export function createRemoteStore(client) {
     },
     async downloadPhoto(path) {
       if (typeof path !== "string" || !PHOTO_PATH.test(path)) problem("VALIDATION", "Caminho da fotografia inválido.");
-      return checked(configured().storage.from(BUCKET).download(path));
+      const blob = await checked(configured().storage.from(BUCKET).download(path));
+      if (!(blob instanceof Blob) || !blob.size || !/^image\/(jpeg|png|webp)$/i.test(blob.type))
+        throw new RemoteStoreError("INVALID_MEDIA", "O arquivo recebido não é uma imagem válida.", {
+          source: "storage.download", status: null, blobType: blob?.type || null, blobSize: blob?.size || 0,
+        });
+      return blob;
     },
     async deletePhoto(photoId) {
       const { id } = await currentUser();

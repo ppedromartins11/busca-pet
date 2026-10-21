@@ -447,6 +447,7 @@ button {
   color: var(--muted);
   font-size: 0.75rem;
 }
+.demo-strip { display: none; }
 .demo-strip a {
   font-weight: 600;
 }
@@ -1695,6 +1696,144 @@ textarea.control {
 .map-empty p {
   color: var(--muted);
   margin-bottom: 26px;
+}
+.map-academic-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  border: 1px solid var(--purple);
+  border-radius: var(--radius);
+  background: var(--lavender);
+  color: var(--ink);
+}
+.map-academic-notice b { color: var(--purple); white-space: nowrap; }
+.demo-disclaimer {
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--lavender);
+  color: var(--muted);
+  font-size: .88rem;
+}
+.support-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--lavender);
+}
+.support-intro h2, .support-categories h2 { margin: 0 0 9px; font-size: 1.2rem; }
+.support-intro p { max-width: 68ch; margin: 0; color: var(--muted); }
+.support-categories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.support-categories article { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-raised); }
+.support-categories .ui-icon { width: 30px; height: 30px; margin-bottom: 16px; color: var(--purple); }
+.support-categories p { margin: 0; color: var(--muted); font-size: .92rem; }
+.map-mode,
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 18px 0;
+}
+.map-controls { justify-content: space-between; }
+.map-controls fieldset {
+  display: flex;
+  flex: 1 1 540px;
+  margin: 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.map-controls fieldset > div { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.map-controls legend { padding: 0 5px; font-size: .84rem; font-weight: 700; }
+.map-filter { display: inline-flex; gap: 7px; align-items: center; font-size: .86rem; cursor: pointer; }
+.map-filter input { width: 18px; height: 18px; accent-color: var(--purple); }
+.map-filter-symbol {
+  display: inline-grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  line-height: 1;
+}
+.map-filter-symbol.last-known { background: #b63838; }
+.map-filter-symbol.sighting { background: #236caf; }
+.map-filter-symbol.support { background: #23754e; }
+.map-filter-symbol.partner { background: #683bb4; }
+.map-layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(250px, .8fr); gap: 20px; align-items: start; }
+.search-map {
+  min-height: 480px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--lavender);
+  z-index: 0;
+}
+.map-attribution-note { margin: 8px 0 0; color: var(--muted); font-size: .76rem; }
+.map-timeline,
+.map-text-list,
+.map-support {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+.map-timeline { padding: 18px; }
+.map-timeline h2,
+.map-text-list h2,
+.map-support h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.map-timeline ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.map-point-item { display: flex; width: 100%; gap: 9px; align-items: flex-start; padding: 9px; border: 0; border-radius: 9px; color: var(--ink); text-align: left; background: transparent; cursor: pointer; font: inherit; }
+.map-point-item:hover { background: var(--lavender); }
+.map-point-item small { display: block; color: var(--muted); font-size: .78rem; line-height: 1.35; }
+.map-text-list,
+.map-support { margin-top: 20px; padding: 20px; }
+.map-text-list ul { margin: 0; padding-left: 20px; }
+.map-text-list li { margin: 7px 0; }
+.map-support > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.map-support article { display: flex; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.map-support h3 { margin: 0 0 4px; font-size: 1rem; }
+.map-support p { margin: 4px 0; color: var(--muted); font-size: .9rem; }
+.map-support small { color: var(--purple); font-weight: 700; }
+.bp-map-icon-wrap { background: transparent; border: 0; }
+.bp-map-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 2px 7px #0006; color: #fff; font-weight: 800; font-size: 18px; }
+.bp-map-icon.last-known { background: #b63838; }
+.bp-map-icon.sighting { background: #236caf; }
+.bp-map-icon.support { background: #23754e; }
+.bp-map-icon.partner { background: #683bb4; }
+.bp-map-popup p { margin: 6px 0; color: #30213f; font-size: .84rem; }
+.bp-map-popup h2 { margin: 4px 0 8px; color: #30213f; font-size: 1rem; }
+.bp-map-popup time { display: block; color: #5e516c; font-size: .78rem; }
+[data-theme="dark"] .map-academic-notice,
+[data-theme="dark"] .map-timeline,
+[data-theme="dark"] .map-text-list,
+[data-theme="dark"] .map-support { background: var(--surface-raised); }
+[data-theme="dark"] .leaflet-layer,
+[data-theme="dark"] .leaflet-control-zoom a,
+[data-theme="dark"] .leaflet-control-attribution { filter: brightness(.78) contrast(1.08); }
+[data-theme="dark"] .leaflet-popup-content-wrapper,
+[data-theme="dark"] .leaflet-popup-tip { background: var(--surface-raised); }
+[data-theme="dark"] .bp-map-popup p,
+[data-theme="dark"] .bp-map-popup h2,
+[data-theme="dark"] .bp-map-popup time { color: var(--ink); }
+@media (max-width: 760px) {
+  .map-academic-notice { flex-direction: column; gap: 4px; }
+  .map-layout { grid-template-columns: 1fr; }
+  .search-map { min-height: 360px; }
+  .map-support > div { grid-template-columns: 1fr; }
+  .support-intro { align-items: flex-start; flex-direction: column; padding: 22px; }
+  .support-intro .btn { width: 100%; }
+  .support-categories { grid-template-columns: 1fr; }
+  .map-controls { align-items: stretch; }
+  .map-controls > .btn { width: 100%; }
 }
 .print-poster {
   border: 3px solid var(--ink);

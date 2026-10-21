@@ -51,6 +51,7 @@ const chrome = process.env.CHROME_PATH || [
       registro: "Crie sua conta",
       "esqueci-senha": "Recuperar senha",
       services: "Rede de apoio",
+      mapa: "Mapa da busca",
       sobre: "Sobre o BuscaPet",
     };
     for (const width of [320, 360, 375, 390, 430, 768, 820, 1024, 1280, 1440, 1920]) {
@@ -58,7 +59,7 @@ const chrome = process.env.CHROME_PATH || [
       for (const [route, heading] of Object.entries(routeHeadings)) {
         await page.goto(base + "/#" + route, { waitUntil: "domcontentloaded" });
         await page.getByRole("heading", { name: heading }).waitFor();
-        if (["home", "login", "registro", "services", "sobre"].includes(route) && [390, 1440].includes(width) && process.env.SCREENSHOT_DIR) {
+        if (["home", "login", "registro", "services", "mapa", "sobre"].includes(route) && [390, 1440].includes(width) && process.env.SCREENSHOT_DIR) {
           fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
           await page.screenshot({
             path: path.join(process.env.SCREENSHOT_DIR, `real-${route}-${width}.png`),
@@ -88,8 +89,8 @@ const chrome = process.env.CHROME_PATH || [
           assert.equal(await page.locator('#real-mobile-nav a[href="#home"]').evaluate((element) => document.activeElement === element), true);
           assert.equal(await page.locator('#real-mobile-nav a[href="#registro"]').isVisible(), true);
           const menu = await page.locator("#real-mobile-nav").boundingBox();
-          const strip = await page.locator(".demo-strip").boundingBox();
-          assert(menu.y + menu.height <= strip.y + 1, "menu móvel sobrepõe o conteúdo");
+          const screen = await page.locator("#real-screen").boundingBox();
+          assert(menu.y + menu.height <= screen.y + 1, "menu móvel sobrepõe o conteúdo");
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1), true);
           if (route === "login" && process.env.SCREENSHOT_DIR) {
             await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, "real-menu-390.png"), fullPage: true });
@@ -109,10 +110,26 @@ const chrome = process.env.CHROME_PATH || [
       }
     }
 
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(base + "/#mapa", { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Mapa da busca" }).waitFor();
+    assert.equal(await page.locator("#search-map").count(), 1);
+    assert.equal(await page.getByText("Quando um ponto público for registrado, ele aparecerá aqui.").count(), 1);
+    await page.getByRole("button", { name: "Ver exemplo ilustrativo" }).click();
+    await page.locator("#search-map.leaflet-container").waitFor();
+    assert.equal(await page.locator(".bp-map-icon").count(), 4);
+    if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, "real-mapa-demo-1440.png"), fullPage: true });
+    await page.locator('input[data-map-filter="sighting"]').uncheck();
+    assert.equal(await page.locator(".bp-map-icon.sighting").count(), 0);
+    await page.locator(".map-point-item").first().click();
+    await page.locator(".leaflet-popup").waitFor();
+    await page.getByRole("button", { name: "Usar minha localização" }).click();
+    await page.getByText(/A localização não foi compartilhada|Não foi possível obter sua localização|Localização usada somente/).waitFor({ timeout: 12_000 });
+
     // Inspeciona somente a apresentação do estado autenticado, sem criar sessão ou dados remotos.
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto(base + "/#services", { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "Rede de apoio" }).waitFor();
+    await page.getByRole("heading", { name: "Rede de apoio", exact: true }).waitFor();
     await page.evaluate(async () => {
       window.BPAuth.getCurrentUser = () => ({ id: "synthetic-ui-only" });
       await window.BPRealApp.render();
