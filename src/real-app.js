@@ -76,19 +76,34 @@
     else location.hash = hash;
   }
   function mount() {
-    root.innerHTML = `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><div class="header-links"><a href="#services">Rede de apoio</a><a href="#sobre">Sobre</a><a id="real-account-link" href="#login">Entrar</a></div></header><nav class="main-nav" aria-label="Navegação principal" id="real-nav"></nav><div class="demo-strip"><span>MVP acadêmico conectado · dados reais no Supabase · use somente dados autorizados</span></div><div id="real-toast" class="toast" role="status" aria-live="polite"></div><section id="real-screen" class="screen current" aria-live="off"></section><dialog id="real-dialog" class="dialog"></dialog>`;
+    root.innerHTML = `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><nav class="main-nav" aria-label="Navegação principal" id="real-nav"></nav><div class="header-actions" id="real-header-actions"></div><button class="menu-toggle" type="button" aria-controls="real-mobile-nav" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button><nav class="mobile-nav" id="real-mobile-nav" aria-label="Menu móvel" hidden></nav></header><div class="demo-strip"><span>MVP acadêmico conectado · dados reais no Supabase · use somente dados autorizados</span></div><div id="real-toast" class="toast" role="status" aria-live="polite"></div><section id="real-screen" class="screen current" aria-live="off"></section><dialog id="real-dialog" class="dialog"></dialog>`;
     document.querySelector("#real-dialog").addEventListener("close", () => lastDialogFocus?.focus());
+    window.matchMedia("(min-width: 1200px)").addEventListener("change", (event) => { if (event.matches) closeMobileMenu(); });
   }
   function chrome(route) {
     const logged = Boolean(user());
     const links = [
       ["home", "Início", "home"],
-      ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"], ["minha-conta", "Minha conta", "user"]] : [["login", "Entrar", "user"], ["registro", "Criar conta", "plus"]]),
+      ["services", "Rede de apoio", ""],
+      ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
     ];
-    document.querySelector("#real-nav").innerHTML = links.map(([path, label, glyph]) => `<a href="#${path}" ${path.split("/")[0] === route ? 'aria-current="page" class="active"' : ""}>${icon(glyph)}${label}</a>`).join("");
-    const account = document.querySelector("#real-account-link");
-    account.href = logged ? "#minha-conta" : "#login";
-    account.textContent = logged ? "Minha conta" : "Entrar";
+    const nav = links.map(([path, label, glyph]) => `<a href="#${path}" ${path.split("/")[0] === route ? 'aria-current="page" class="active"' : ""}>${glyph ? icon(glyph) : ""}${label}</a>`).join("");
+    const actions = logged
+      ? `<a href="#minha-conta" ${route === "minha-conta" ? 'aria-current="page"' : ""}>${icon("user")}Minha conta</a>`
+      : `<a href="#login" ${route === "login" ? 'aria-current="page"' : ""}>${icon("user")}Entrar</a><a class="btn primary" href="#registro" ${route === "registro" ? 'aria-current="page"' : ""}>${icon("plus")}Criar conta</a>`;
+    document.querySelector("#real-nav").innerHTML = nav;
+    document.querySelector("#real-header-actions").innerHTML = actions;
+    document.querySelector("#real-mobile-nav").innerHTML = nav + `<div class="mobile-actions">${actions}</div>`;
+    closeMobileMenu();
+  }
+  function closeMobileMenu(focus = false) {
+    const toggle = document.querySelector(".menu-toggle");
+    const menu = document.querySelector("#real-mobile-nav");
+    if (!toggle || !menu) return;
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Abrir menu");
+    if (focus) toggle.focus();
   }
   function setPage(html, heading = "BuscaPet") {
     const screen = document.querySelector("#real-screen");
@@ -340,6 +355,15 @@
     dialog.querySelector("button")?.focus();
   }
   async function onClick(event) {
+    if (event.target.closest("#real-mobile-nav a")) closeMobileMenu();
+    if (event.target.closest(".menu-toggle")) {
+      const toggle = document.querySelector(".menu-toggle");
+      const menu = document.querySelector("#real-mobile-nav");
+      menu.hidden = !menu.hidden;
+      toggle.setAttribute("aria-expanded", String(!menu.hidden));
+      toggle.setAttribute("aria-label", menu.hidden ? "Abrir menu" : "Fechar menu");
+      return;
+    }
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
@@ -406,5 +430,8 @@
       void render();
     }).catch((error) => { message(fail(error)); void render(); });
   }
-  window.BPRealApp = Object.freeze({ mount, render, onClick, onSubmit, onInput, onChange });
+  function onKeydown(event) {
+    if (event.key === "Escape" && !document.querySelector("#real-mobile-nav")?.hidden) closeMobileMenu(true);
+  }
+  window.BPRealApp = Object.freeze({ mount, render, onClick, onSubmit, onInput, onChange, onKeydown });
 })();

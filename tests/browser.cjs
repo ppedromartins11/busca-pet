@@ -236,6 +236,8 @@ const BASE = process.env.BASE_URL || "http://localhost:8000";
         return ids.filter((id, i) => ids.indexOf(id) !== i);
       });
       assert.deepEqual(duplicate, [], `IDs duplicados: ${route}`);
+      assert.equal(await page.locator(".app-header > .main-nav").count(), 1);
+      assert.equal(await page.locator(".app-header ~ .main-nav").count(), 0);
     }
   }
   assert.deepEqual(overflow, [], "Rolagem horizontal");
@@ -268,7 +270,9 @@ const BASE = process.env.BASE_URL || "http://localhost:8000";
   await registration.waitForURL(/#verificar-email/);
   await rg('[data-action="verify-email"]').click();
   await registration.waitForURL(/#painel-tutor/);
-  await registration.locator("#role-switch").selectOption("colaborador");
+  await registration.locator(".menu-toggle").click();
+  assert.equal(await registration.locator(".menu-toggle").getAttribute("aria-expanded"), "true");
+  await registration.locator("#role-switch-mobile").selectOption("colaborador");
   await registration.waitForURL(/#painel-colaborador/);
   assert.equal(
     await registration.evaluate(() => window.BPAuth.getSession().userId),

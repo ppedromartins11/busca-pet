@@ -66,13 +66,9 @@
     const root = $(".app-shell");
     root.insertAdjacentHTML(
       "afterbegin",
-      `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><div class="header-links"><a href="#services">Rede de apoio</a><a href="#sobre">Sobre o projeto</a><div id="role-control"></div></div></header><div class="demo-strip"><span>Protótipo local · autenticação simulada · não use dados reais</span><a id="account-link" href="#login">Entrar</a></div><div class="storage-warning" id="storage-warning" role="status"></div>`,
+      `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><nav class="main-nav" aria-label="Navegação principal"></nav><div class="header-actions"><div id="role-control"></div><a id="account-link" href="#login">${icon("user")}Entrar</a><a id="signup-link" class="btn primary" href="#registro">${icon("plus")}Criar conta</a></div><button class="menu-toggle" type="button" aria-controls="local-mobile-nav" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button><nav class="mobile-nav" id="local-mobile-nav" aria-label="Menu móvel" hidden></nav></header><div class="demo-strip"><span>Protótipo local · autenticação simulada · não use dados reais</span></div><div class="storage-warning" id="storage-warning" role="status"></div>`,
     );
-    root.insertAdjacentHTML(
-      "beforeend",
-      `<nav class="main-nav" aria-label="Navegação principal"></nav>`,
-    );
-    $(".app-header").insertBefore($(".main-nav"), $(".header-links"));
+    window.matchMedia("(min-width: 1200px)").addEventListener("change", (event) => { if (event.matches) closeMobileMenu(); });
     document.body.insertAdjacentHTML(
       "beforeend",
       '<div id="toast" class="toast" role="status" aria-live="polite"></div><dialog id="dialog" class="dialog"></dialog>',
@@ -87,25 +83,19 @@
     );
   }
   function navLink(hash, nav, label, iconName, extra = "") {
-    return `<a href="#${hash}" data-nav="${nav}" class="${extra}">${icon(iconName)}${label}</a>`;
+    return `<a href="#${hash}" data-nav="${nav}" class="${extra}">${iconName ? icon(iconName) : ""}${label}</a>`;
   }
   function updateChrome(section) {
     const user = A.getCurrentUser();
     mode = A.getActiveRole() || "visitante";
-    let links = [navLink("home", "home", "Início", "home")];
-    if (!user) {
-      links.push(
-        navLink("services", "services", "Rede de apoio", "heart"),
-        navLink("login", "login", "Entrar", "user"),
-      );
-    } else if (mode === "tutor") {
+    let links = [navLink("home", "home", "Início", "home"), navLink("services", "services", "Rede de apoio", "")];
+    if (user && mode === "tutor") {
       links.push(
         navLink("painel-tutor", "painel-tutor", "Área do tutor", "paw"),
         navLink("post", "post", "Publicar", "plus", "post-link"),
         navLink("favoritos", "favoritos", "Favoritos", "heart"),
-        navLink("minha-conta", "perfil", "Minha conta", "user"),
       );
-    } else if (mode === "colaborador") {
+    } else if (user && mode === "colaborador") {
       links.push(
         navLink(
           "painel-colaborador",
@@ -114,25 +104,19 @@
           "paw",
         ),
         navLink("favoritos", "favoritos", "Salvos", "heart"),
-        navLink("minha-conta", "perfil", "Minha conta", "user"),
       );
-    } else if (mode === "parceiro") {
+    } else if (user && mode === "parceiro") {
       links.push(
         navLink("painel-parceiro", "painel-parceiro", "Organização", "paw"),
-        navLink("services", "services", "Rede de apoio", "heart"),
-        navLink("minha-conta", "perfil", "Minha conta", "user"),
       );
-    } else if (mode === "moderador") {
+    } else if (user && mode === "moderador") {
       links.push(
         navLink("admin", "admin", "Moderação", "paw"),
-        navLink("minha-conta", "perfil", "Minha conta", "user"),
       );
-    } else {
-      links.push(navLink("minha-conta", "perfil", "Minha conta", "user"));
     }
     $(".main-nav").innerHTML = links.join("");
     const roleControl = $("#role-control");
-    if (!user) roleControl.innerHTML = '<a href="#login">Entrar</a>';
+    if (!user) roleControl.innerHTML = "";
     else if (user.roles.length > 1)
       roleControl.innerHTML = `<label class="role-switch-label">Usando como:<select id="role-switch" aria-label="Função ativa">${user.roles
         .map(
@@ -144,7 +128,13 @@
       roleControl.innerHTML = `<span class="mode-pill">${roleNames[mode] || "Conta"}</span>`;
     const accountLink = $("#account-link");
     accountLink.href = user ? "#minha-conta" : "#login";
-    accountLink.textContent = user ? "Minha conta" : "Entrar";
+    accountLink.innerHTML = `${icon("user")}${user ? "Minha conta" : "Entrar"}`;
+    if (section === (user ? "minha-conta" : "login")) accountLink.setAttribute("aria-current", "page");
+    else accountLink.removeAttribute("aria-current");
+    $("#signup-link").hidden = Boolean(user);
+    const mobileRole = user?.roles.length > 1
+      ? `<label class="role-switch-label">Usando como:<select id="role-switch-mobile" aria-label="Função ativa">${user.roles.map((role) => `<option value="${role}" ${role === mode ? "selected" : ""}>${roleNames[role]}</option>`).join("")}</select></label>`
+      : "";
     $$(".main-nav a").forEach((link) => {
       const active =
         link.dataset.nav === section ||
@@ -155,6 +145,17 @@
       link.classList.toggle("active", active);
       if (active) link.setAttribute("aria-current", "page");
     });
+    $("#local-mobile-nav").innerHTML = $(".main-nav").innerHTML + `<div class="mobile-actions">${mobileRole}<a href="${accountLink.getAttribute("href")}" ${accountLink.hasAttribute("aria-current") ? 'aria-current="page"' : ""}>${accountLink.innerHTML}</a>${user ? "" : `<a class="btn primary" href="#registro" ${section === "registro" ? 'aria-current="page"' : ""}>${icon("plus")}Criar conta</a>`}</div>`;
+    closeMobileMenu();
+  }
+  function closeMobileMenu(focus = false) {
+    const toggle = $(".menu-toggle");
+    const menu = $("#local-mobile-nav");
+    if (!toggle || !menu) return;
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Abrir menu");
+    if (focus) toggle.focus();
   }
   function renderLimited(meta) {
     const allowed = (meta.roles || []).filter((role) => A.hasRole(role));
@@ -965,6 +966,15 @@
   }
 
   function click(event) {
+    if (event.target.closest("#local-mobile-nav a")) closeMobileMenu();
+    if (event.target.closest(".menu-toggle")) {
+      const toggle = $(".menu-toggle");
+      const menu = $("#local-mobile-nav");
+      menu.hidden = !menu.hidden;
+      toggle.setAttribute("aria-expanded", String(!menu.hidden));
+      toggle.setAttribute("aria-label", menu.hidden ? "Abrir menu" : "Fechar menu");
+      return;
+    }
     if (
       event.target.closest("#filter-details summary") &&
       window.matchMedia?.("(min-width: 1024px)").matches
@@ -1017,7 +1027,7 @@
   }
   async function change(e) {
     saveDraft(e.target.closest("form"));
-    if (e.target.id === "role-switch") {
+    if (["role-switch", "role-switch-mobile"].includes(e.target.id)) {
       A.setActiveRole(e.target.value);
       mode = e.target.value;
       goto(roleHomes[mode] || "#home");
@@ -1312,6 +1322,10 @@
     }
   }
   function onKeydown(e) {
+    if (e.key === "Escape" && !$("#local-mobile-nav")?.hidden) {
+      closeMobileMenu(true);
+      return;
+    }
     if (!e.target.matches('input[type="password"]')) return;
     const warning = e.target.closest("form")?.querySelector(".caps-warning");
     if (warning)
