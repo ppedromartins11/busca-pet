@@ -294,6 +294,14 @@ export function createRemoteStore(client) {
     async listPhotos(occurrenceId) {
       return checked(configured().from("occurrence_photos").select().eq("occurrence_id", requiredUuid(occurrenceId, "Ocorrência")).order("created_at", { ascending: true }));
     },
+    async listPublicCoverPhotos(occurrenceIds) {
+      if (!Array.isArray(occurrenceIds)) problem("VALIDATION", "Lista de ocorrências inválida.");
+      const ids = [...new Set(occurrenceIds.map((id) => requiredUuid(id, "Ocorrência")))];
+      if (!ids.length) return [];
+      return checked(configured().from("occurrence_photos")
+        .select("id,occurrence_id,storage_path,mime_type,byte_size,created_at")
+        .in("occurrence_id", ids).order("created_at", { ascending: true }));
+    },
     async listPetPhotos(petId) {
       await currentUser();
       return checked(configured().from("pet_photos").select().eq("pet_id", requiredUuid(petId, "Animal")).order("is_cover", { ascending: false }).order("created_at", { ascending: true }));
@@ -337,17 +345,23 @@ export function createRemoteStore(client) {
     },
     async reusePetPhotosForOccurrence(petId, occurrenceId) {
       const { id } = await currentUser();
-      const photos = await api.listPetPhotos(petId);
+      const normalizedPetId = requiredUuid(petId, "Animal");
+      const normalizedOccurrenceId = requiredUuid(occurrenceId, "Ocorrência");
+      const [photos, existing] = await Promise.all([
+        api.listPetPhotos(normalizedPetId),
+        api.listPhotos(normalizedOccurrenceId),
+      ]);
       if (!photos.length) return [];
-      const rows = photos.slice(0, 5).map((photo) => ({
-        occurrence_id: requiredUuid(occurrenceId, "Ocorrência"),
+      const usedPaths = new Set(existing.map((photo) => photo.storage_path));
+      const rows = photos.filter((photo) => !usedPaths.has(photo.storage_path)).slice(0, 5).map((photo) => ({
+        occurrence_id: normalizedOccurrenceId,
         sighting_id: null,
         uploaded_by: id,
         storage_path: photo.storage_path,
         mime_type: photo.mime_type,
         byte_size: photo.byte_size,
       }));
-      return checked(configured().from("occurrence_photos").insert(rows).select());
+      return rows.length ? checked(configured().from("occurrence_photos").insert(rows).select()) : [];
     },
     async uploadPhoto({ occurrenceId = null, sightingId = null, file } = {}) {
       const { id } = await currentUser();

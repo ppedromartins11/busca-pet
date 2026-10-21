@@ -25,6 +25,7 @@ function clientMock(reply = () => ({ data: { id: PET_ID }, error: null })) {
         delete() { call.action = "delete"; return q; },
         select() { return q; },
         eq(key, value) { call.filters.push([key, value]); return q; },
+        in(key, values) { call.filters.push([key, values]); return q; },
         order() { return q; },
         range() { return q; },
         maybeSingle() { return Promise.resolve(reply(call)); },
@@ -143,4 +144,32 @@ test("pet photographs use the authenticated private folder and metadata", async 
   assert.equal(metadata.payload.pet_id, PET_ID);
   assert.equal(metadata.payload.uploaded_by, USER_ID);
   assert.equal(metadata.payload.storage_path, upload.path);
+});
+
+test("public alert covers request all visible metadata in one RLS-protected query", async () => {
+  const anotherOccurrence = "44444444-4444-4444-8444-444444444444";
+  const { client, calls } = clientMock((call) => call.table === "occurrence_photos"
+    ? { data: [], error: null } : { data: null, error: null });
+  const rows = await createRemoteStore(client).listPublicCoverPhotos([OCCURRENCE_ID, anotherOccurrence, OCCURRENCE_ID]);
+  assert.deepEqual(rows, []);
+  const metadataQueries = calls.filter((call) => call.table === "occurrence_photos");
+  assert.equal(metadataQueries.length, 1);
+  assert.deepEqual(metadataQueries[0].filters, [["occurrence_id", [OCCURRENCE_ID, anotherOccurrence]]]);
+});
+
+test("reusing animal photos avoids paths already attached to the occurrence", async () => {
+  const existingPath = `${USER_ID}/55555555-5555-4555-8555-555555555555.jpg`;
+  const newPath = `${USER_ID}/66666666-6666-4666-8666-666666666666.jpg`;
+  const { client, calls } = clientMock((call) => {
+    if (call.table === "pet_photos") return { data: [
+      { storage_path: existingPath, mime_type: "image/jpeg", byte_size: 1 },
+      { storage_path: newPath, mime_type: "image/jpeg", byte_size: 1 },
+    ], error: null };
+    if (call.table === "occurrence_photos" && call.action === "select") return { data: [{ storage_path: existingPath }], error: null };
+    return { data: [{ id: PET_ID }], error: null };
+  });
+  await createRemoteStore(client).reusePetPhotosForOccurrence(PET_ID, OCCURRENCE_ID);
+  const insert = calls.find((call) => call.table === "occurrence_photos" && call.action === "insert");
+  assert.equal(insert.payload.length, 1);
+  assert.equal(insert.payload[0].storage_path, newPath);
 });

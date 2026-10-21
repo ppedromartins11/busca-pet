@@ -71,6 +71,10 @@
     for (const source of photos) URL.revokeObjectURL(source);
     photos = [];
   }
+  function discardPhoto(source) {
+    URL.revokeObjectURL(source);
+    photos = photos.filter((current) => current !== source);
+  }
   function navigate(hash) {
     if (location.hash === hash) void render();
     else location.hash = hash;
@@ -117,7 +121,67 @@
     return `<div class="page ${narrow ? "narrow" : ""}"><div class="page-title"><div><h1>${esc(heading)}</h1>${intro ? `<p class="intro">${esc(intro)}</p>` : ""}</div></div>${content}</div>`;
   }
   function alertCard(item) {
-    return `<article class="pet"><div class="photo"><span class="photo-placeholder">${icon("paw")}<small>Foto no detalhe</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${types[item.type]}</span><span class="tag">${states[item.status] || "Situação indisponível"}</span></div><h3>${types[item.type]}</h3><p class="pet-description">${esc(item.description)}</p><p class="pet-location">${icon("pin")} ${esc(item.region)}<span>${esc(item.city)}</span></p>${item.public_reference ? `<p class="hint">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>${fmtDate(item.last_seen_at)}</span></div><div class="card-footer"><span>Alerta da comunidade</span><b>Ver alerta</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${types[item.type]} em ${esc(item.city)}"></a></article>`;
+    return `<article class="pet"><div class="photo" data-alert-photo="${esc(item.id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto disponível</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${types[item.type]}</span><span class="tag">${states[item.status] || "Situação indisponível"}</span></div><h3>${types[item.type]}</h3><p class="pet-description">${esc(item.description)}</p><p class="pet-location">${icon("pin")} ${esc(item.region)}<span>${esc(item.city)}</span></p>${item.public_reference ? `<p class="hint">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>${fmtDate(item.last_seen_at)}</span></div><div class="card-footer"><span>Alerta da comunidade</span><b>Ver alerta</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${types[item.type]} em ${esc(item.city)}"></a></article>`;
+  }
+  function alertPhotoPlaceholder(target, text) {
+    target.innerHTML = `<span class="photo-placeholder">${icon("paw")}<small>${esc(text)}</small></span>`;
+  }
+  async function showAlertPhotos(rows, ticket) {
+    if (!rows.length) return;
+    let metadata;
+    try { metadata = await D.listPublicCoverPhotos(rows.map((row) => row.id)); }
+    catch { return; }
+    if (ticket !== generation) return;
+    const covers = new Map();
+    for (const photo of metadata) if (!covers.has(photo.occurrence_id)) covers.set(photo.occurrence_id, photo);
+    const targets = [...document.querySelectorAll("[data-alert-photo]")]
+      .map((target) => ({ target, photo: covers.get(target.dataset.alertPhoto) }))
+      .filter(({ photo }) => photo);
+    const queue = [];
+    let active = 0;
+    const next = () => {
+      while (active < 4 && queue.length) {
+        const { target, photo } = queue.shift();
+        active += 1;
+        void (async () => {
+          try {
+            const blob = await D.downloadPhoto(photo.storage_path);
+            if (ticket !== generation || !target.isConnected) return;
+            const source = URL.createObjectURL(blob);
+            photos.push(source);
+            const image = document.createElement("img");
+            image.className = "alert-cover";
+            image.alt = "Foto do alerta de animal";
+            image.loading = "lazy";
+            image.decoding = "async";
+            image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
+            image.addEventListener("error", () => {
+              discardPhoto(source);
+              alertPhotoPlaceholder(target, "Foto indisponível");
+            }, { once: true });
+            image.src = source;
+            target.replaceChildren(image);
+          } catch {
+            if (ticket === generation && target.isConnected) alertPhotoPlaceholder(target, "Foto indisponível");
+          } finally {
+            active -= 1;
+            next();
+          }
+        })();
+      }
+    };
+    const enqueue = (entry) => {
+      if (entry.target.dataset.photoQueued) return;
+      entry.target.dataset.photoQueued = "true";
+      queue.push(entry);
+      next();
+    };
+    if (!("IntersectionObserver" in window)) { targets.forEach(enqueue); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (ticket !== generation) { observer.disconnect(); return; }
+      for (const entry of entries) if (entry.isIntersecting) { observer.unobserve(entry.target); enqueue(entry); }
+    }, { rootMargin: "600px 0px" });
+    targets.forEach((entry) => observer.observe(entry.target));
   }
   async function home(ticket) {
     const rows = await D.listPublicOccurrences();
@@ -128,6 +192,7 @@
       && (!term || [row.city, row.region, row.public_reference, row.description].some((value) => String(value || "").toLocaleLowerCase("pt-BR").includes(term))));
     setPage(`<div class="page catalog-page"><div class="search-hero"><div class="hero-copy"><h1>Vamos trazer seu pet de volta.</h1><p>Reúna as pistas. Organize a busca.<br>Conte com quem está por perto.</p><div class="hero-actions"><a class="btn primary" href="#publicar/lost">${icon("paw")} Meu pet sumiu</a><a class="btn secondary" href="#publicar/found">Encontrei um pet</a></div></div><figure class="hero-pet"><img src="assets/hex.png" alt="Hex, cão ilustrativo do projeto"><figcaption>${icon("pin")}<span><b>Cada pista tem um lugar.</b><small>Imagem ilustrativa</small></span></figcaption></figure></div><div class="catalog-heading"><div><h2>Alertas da comunidade</h2><p>Consulte a região e registre uma pista se tiver uma conta.</p></div></div><div class="browse-layout"><aside class="browse-sidebar" aria-label="Busca e filtros"><label class="search">${icon("search")}<span class="sr-only">Buscar alertas</span><input id="real-query" value="${esc(filters.query)}" placeholder="Cidade, região ou descrição"></label><div class="filter-controls"><label>Tipo<select id="real-type"><option value="">Todos</option><option value="lost" ${filters.type === "lost" ? "selected" : ""}>Desaparecidos</option><option value="found" ${filters.type === "found" ? "selected" : ""}>Encontrados</option></select></label><label>Situação<select id="real-status"><option value="">Todas</option>${Object.entries(states).map(([v, label]) => `<option value="${v}" ${filters.status === v ? "selected" : ""}>${label}</option>`).join("")}</select></label></div></aside><div class="browse-results"><p id="real-result-count" role="status" aria-live="polite">${shown.length} ${shown.length === 1 ? "alerta encontrado" : "alertas encontrados"}</p><div class="list alert-grid" id="real-results">${shown.length ? shown.map(alertCard).join("") : empty("Nenhum alerta encontrado", "Altere os filtros ou publique o primeiro alerta.")}</div></div></div></div>`, "Alertas");
     document.querySelector("#real-query")?.setSelectionRange?.(filters.query.length, filters.query.length);
+    void showAlertPhotos(shown, ticket);
   }
   async function detail(id, ticket) {
     if (!UUID.test(id)) return unavailable("Alerta indisponível");
@@ -229,7 +294,7 @@
     if (ticket !== generation) return;
     if (id && (!row || row.reporter_id !== user()?.id)) return unavailable("Alerta indisponível");
     const kind = row?.type || (type === "found" ? "found" : "lost");
-    setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Reutilizar as fotos privadas do animal selecionado nesta ocorrência.</span></label><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
+    setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Adicionar fotos cadastradas do meu animal a este alerta.</span></label><p class="hint full">A confirmação associa até cinco fotos do animal a este alerta. Elas só aparecem no feed se o alerta for público.</p><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
   }
   async function dashboard(ticket) {
     const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
@@ -363,7 +428,7 @@
         const selected = form.elements.photo.files?.[0];
         const file = selected ? await preparePhoto(selected) : null;
         const row = form.dataset.id ? await D.updateOccurrence(form.dataset.id, data) : await D.createOccurrence(data);
-        if (!form.dataset.id && form.elements.reuse_pet_photos?.checked && data.pet_id) {
+        if (form.elements.reuse_pet_photos?.checked && data.pet_id) {
           try { await D.reusePetPhotosForOccurrence(data.pet_id, row.id); }
           catch (error) { notice = `Alerta salvo, mas as fotos do animal não foram reutilizadas: ${fail(error)}`; }
         }
