@@ -1,5 +1,5 @@
 /* Interface conectada: dados reais via publishable key, Auth e RLS. */
-import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-map.js";
+import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-map.js";
 
 (() => {
   "use strict";
@@ -20,8 +20,14 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
   let verificationEmail = "";
   let messageTimer;
   let mapController = null;
+  let pointPicker = null;
+  let selectedPoint = null;
+  let removeExistingPoint = false;
   let mapMode = "real";
   let mapFilters = { "last-known": true, sighting: true, support: true, partner: true };
+  let mapPoints = [];
+  let mapOccurrenceId = "";
+  let mapQueryGeneration = 0;
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -83,6 +89,8 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
   function destroyMap() {
     if (mapController) mapController.destroy();
     mapController = null;
+    if (pointPicker) pointPicker.destroy();
+    pointPicker = null;
   }
   function navigate(hash) {
     if (location.hash === hash) void render();
@@ -175,9 +183,103 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
     mapController.setPoints(points, mapFilters);
     requestAnimationFrame(() => mapController?.invalidateSize());
   }
+  function asMapPoint(row) {
+    return {
+      id: row.id, category: row.category, occurrenceId: row.occurrence_id,
+      latitude: row.latitude, longitude: row.longitude, radius_m: row.radius_m,
+      title: row.title, city: row.city, region: `${row.region}, ${row.city}`,
+      time: fmtDate(row.event_at, true), eventAt: row.event_at,
+      description: row.description || "Área aproximada indicada no alerta.",
+      state: states[row.occurrence_status] || "Alerta público",
+    };
+  }
+  function mapListHtml(points) {
+    const timeline = points.filter((point) => point.category === "last-known" || point.category === "sighting")
+      .sort((a, b) => (a.category === "last-known" ? -1 : 1) - (b.category === "last-known" ? -1 : 1)
+        || Date.parse(b.eventAt || 0) - Date.parse(a.eventAt || 0));
+    const latestSighting = timeline.find((point) => point.category === "sighting")?.id;
+    return {
+      timeline: timeline.length ? `<ol>${timeline.map((point) => `<li><button type="button" class="map-point-item" data-action="focus-map-point" data-id="${esc(point.id)}"><span class="map-filter-symbol ${esc(point.category)}" aria-hidden="true">${MAP_CATEGORY_META[point.category].symbol}</span><span><b>${esc(point.title)}${point.id === latestSighting ? " · mais recente" : ""}</b><small>${esc(point.region)} · ${esc(point.time || "")}</small></span></button></li>`).join("")}</ol>` : '<p>Ainda não há eventos publicados para esta busca.</p>',
+      list: points.length ? `<ul>${points.map((point) => `<li><b>${esc(point.title)}:</b> ${esc(point.region)}${point.time ? ` · ${esc(point.time)}` : ""}. ${esc(point.description)} ${point.occurrenceId ? `<a href="${url("pet", point.occurrenceId)}">Ver alerta</a>` : ""}</li>`).join("")}</ul>` : `<p>${mapOccurrenceId ? "Esta ocorrência ainda não possui uma região marcada no mapa." : "Ainda não há pontos registrados para esta busca."}</p>`,
+    };
+  }
+  async function loadRealMapPoints({ useViewport = false } = {}) {
+    const request = ++mapQueryGeneration;
+    const controller = mapController;
+    const status = document.querySelector("#map-results-status");
+    if (!controller || !status) return;
+    status.textContent = "Atualizando pontos…";
+    const city = document.querySelector("#map-city")?.value.trim() || "";
+    const region = document.querySelector("#map-region")?.value.trim() || "";
+    const occurrenceStatus = document.querySelector("#map-status-filter")?.value || "";
+    const days = Number(document.querySelector("#map-period")?.value || 0);
+    try {
+      const rows = await D.listPublicMapPoints({
+        occurrenceId: mapOccurrenceId || null,
+        center: useViewport ? controller.getSearchArea() : null,
+        city, region, status: occurrenceStatus,
+        since: days ? new Date(Date.now() - days * 86400000).toISOString() : null,
+        limit: 200,
+      });
+      if (request !== mapQueryGeneration || mapController !== controller) return;
+      mapPoints = rows.map(asMapPoint);
+      controller.setPoints(mapPoints, mapFilters, { fit: !useViewport });
+      const lists = mapListHtml(mapPoints);
+      document.querySelector("#map-timeline-events").innerHTML = lists.timeline;
+      document.querySelector("#map-text-points").innerHTML = lists.list;
+      status.textContent = `${mapPoints.length} ${mapPoints.length === 1 ? "ponto publicado" : "pontos publicados"}`;
+    } catch (error) {
+      if (request !== mapQueryGeneration || mapController !== controller) return;
+      status.textContent = error?.code === "PGRST202" || error?.code === "UNAVAILABLE"
+        ? "Os pontos do mapa ainda não estão disponíveis. Tente novamente após a atualização do serviço."
+        : fail(error);
+      console.error("[BuscaPet][mapa]", { code: error?.code, status: error?.status, cause: error?.message });
+    }
+  }
+  function realMapPage(occurrenceId = "") {
+    destroyMap();
+    mapOccurrenceId = UUID.test(occurrenceId) ? occurrenceId : "";
+    mapPoints = mapMode === "demo" ? DEMO_MAP_POINTS : [];
+    const lists = mapListHtml(mapPoints);
+    const filterFields = mapMode === "real" ? `<div class="map-search-fields"><label>Cidade<input class="control" id="map-city" maxlength="80" placeholder="Todas as cidades"></label><label>Região<input class="control" id="map-region" maxlength="100" placeholder="Todas as regiões"></label><label>Situação<select class="control" id="map-status-filter"><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label>Período<select class="control" id="map-period"><option value="">Qualquer data</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label></div><div class="actions"><button class="btn secondary" type="button" data-action="apply-map-filters">Aplicar filtros</button><button class="btn secondary" type="button" data-action="refresh-map">Atualizar pontos</button></div>` : "";
+    setPage(shell("Mapa da busca", "Acompanhe avistamentos e descubra onde concentrar as buscas.", `${mapOccurrenceId ? `<p><a class="back-link" href="${url("pet", mapOccurrenceId)}">‹ Voltar ao alerta</a></p>` : ""}${mapMode === "demo" ? '<p class="demo-disclaimer" role="note">Exemplo ilustrativo — os pontos não representam avistamentos reais.</p>' : ""}<div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados da busca</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Ver exemplo ilustrativo</button></div>${filterFields}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${Object.keys(MAP_CATEGORY_META).map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-results-status" class="hint" role="status" aria-live="polite"></p><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de regiões aproximadas"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A localização do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline"><h2>Linha do tempo</h2><div id="map-timeline-events">${lists.timeline}</div></aside></div><section class="map-text-list"><h2>Pontos da busca</h2><div id="map-text-points">${lists.list}</div></section>`, false), "Mapa da busca");
+    const target = document.querySelector("#search-map");
+    mapController = createSearchMap(target, { onTilesError: () => {
+      const status = document.querySelector("#map-tiles-status");
+      if (status) status.textContent = "Não foi possível carregar o fundo do mapa. A lista textual continua disponível.";
+    } });
+    mapController.setPoints(mapPoints, mapFilters);
+    requestAnimationFrame(() => mapController?.invalidateSize());
+    if (mapMode === "real") void loadRealMapPoints();
+  }
   function servicesPage() {
     destroyMap();
     setPage(shell("Rede de apoio", "Encontre formas seguras de ajudar e fortaleça a busca na sua comunidade.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Divulgue o alerta na região indicada, confira pontos próximos com segurança e informe um avistamento com data, horário e referência.</p></div><a class="btn primary" href="#mapa">${icon("map")}Ver pontos no mapa</a></section><section class="support-categories" aria-label="Categorias de apoio"><article>${icon("search")}<h2>Divulgação local</h2><p>Compartilhe o alerta em grupos de bairro, condomínios e comércios, sempre usando as informações públicas.</p></article><article>${icon("paw")}<h2>Busca em campo</h2><p>Ajude a percorrer a região em horários combinados. Não entre em locais privados nem se exponha a riscos.</p></article><article>${icon("heart")}<h2>Acolhimento temporário</h2><p>Se encontrar um animal, mantenha-o em segurança e registre a ocorrência para aproximar o tutor.</p></article></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Colaboradores e parceiros</h2><p>Não há colaboradores, clínicas veterinárias ou pet shops cadastrados para exibição no momento. Quando um contato autorizar a divulgação, ele aparecerá nesta página.</p><h2>Orientações para apoiar um tutor</h2><p>Evite publicar endereço residencial, telefone ou localização exata. Compartilhe somente a referência informada no alerta e encaminhe pistas pelo BuscaPet.</p></section>`, false), "Rede de apoio");
+  }
+  function pointPickerMarkup(kind) {
+    const occurrence = kind === "occurrence";
+    return `<fieldset class="geo-picker full"><legend>${occurrence ? "Última região conhecida" : "Região do avistamento"} (opcional)</legend><p>Amplie o mapa, clique na região e arraste o marcador se precisar ajustar. Pelo teclado, use as setas para mover o mapa e marque o centro. O ponto divulgado será arredondado e exibido como uma área de cerca de 900 metros de raio.</p><div class="geo-picker-map" id="${kind}-point-map" role="application" aria-label="Escolha uma região aproximada no mapa"></div><div class="actions"><button class="btn secondary small" type="button" data-action="choose-center">Marcar centro do mapa</button><button class="btn secondary small" type="button" data-action="clear-point">Remover região marcada</button></div><p id="point-selection-status" role="status">Nenhuma região marcada.</p><label>Referência pública da região<input class="control" name="location_description" maxlength="200" placeholder="Ex.: perto da praça central"></label><label class="check-label"><input type="checkbox" name="location_consent"><span>Autorizo divulgar esta região aproximada no mapa público${occurrence ? "." : " somente após revisão e aprovação do tutor."}</span></label></fieldset>`;
+  }
+  function mountPointPicker(kind, initial = null) {
+    const target = document.querySelector(`#${kind}-point-map`);
+    if (!target) return;
+    selectedPoint = null;
+    removeExistingPoint = false;
+    pointPicker = createPointPicker(target, {
+      initial: kind === "occurrence" ? initial : null,
+      center: kind === "sighting" ? initial : null,
+      onChange: (point) => {
+      selectedPoint = point;
+      const status = document.querySelector("#point-selection-status");
+      if (status) status.textContent = "Região aproximada marcada no mapa (raio de 900 m).";
+      if (kind === "occurrence" && initial
+        && (point.latitude !== initial.latitude || point.longitude !== initial.longitude)) {
+        const consent = document.querySelector('[name="location_consent"]');
+        if (consent) consent.checked = false;
+      }
+      },
+    });
+    requestAnimationFrame(() => pointPicker?.invalidateSize());
   }
   function alertCard(item) {
     return `<article class="pet"><div class="photo" data-alert-photo="${esc(item.id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto disponível</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${types[item.type]}</span><span class="tag">${states[item.status] || "Situação indisponível"}</span></div><h3>${types[item.type]}</h3><p class="pet-description">${esc(item.description)}</p><p class="pet-location">${icon("pin")} ${esc(item.region)}<span>${esc(item.city)}</span></p>${item.public_reference ? `<p class="hint">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>${fmtDate(item.last_seen_at)}</span></div><div class="card-footer"><span>Alerta da comunidade</span><b>Ver alerta</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${types[item.type]} em ${esc(item.city)}"></a></article>`;
@@ -277,6 +379,19 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
     const canReport = row.status === "active" && row.visibility === "public";
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
     setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${canReport && !user() ? '<p class="hint">O envio sem conta está temporariamente indisponível até a publicação do ingresso protegido.</p>' : ""}${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    const mapState = document.createElement("section");
+    mapState.className = "occurrence-map-state";
+    mapState.innerHTML = '<h2 class="section-heading">Região no mapa</h2><p>Verificando região publicada…</p>';
+    document.querySelector("#real-sightings")?.before(mapState);
+    void D.getOccurrencePublicLocation(id).then((point) => {
+      if (ticket !== generation || !mapState.isConnected) return;
+      mapState.innerHTML = point
+        ? `<h2 class="section-heading">Região no mapa</h2><p>Uma área aproximada de ${point.radius_m} m está marcada para este alerta.</p>`
+        : `<h2 class="section-heading">Região no mapa</h2><p>Esta ocorrência ainda não possui uma região marcada no mapa.</p>${mine ? `<a class="btn secondary" href="${url("editar", id)}">Adicionar localização</a>` : ""}`;
+    }).catch((error) => {
+      if (ticket === generation && mapState.isConnected) mapState.innerHTML = `<h2 class="section-heading">Região no mapa</h2><p>Não foi possível consultar a região agora.</p>`;
+      console.error("[BuscaPet][localização]", { code: error?.code, status: error?.status, cause: error?.message });
+    });
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
   }
@@ -302,8 +417,16 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
       if (ticket !== generation) return;
       const target = document.querySelector("#real-sightings");
       if (!target) return;
-      target.innerHTML = `<h2 class="section-heading">Avistamentos recebidos (${rows.length})</h2>${rows.length ? `<div class="timeline">${rows.map((row) => `<article><b>${esc(row.area_description)}</b><p>${esc(row.description)}</p><small>${fmtDate(row.observed_at, true)} · ${esc(row.status)}</small></article>`).join("")}</div>` : '<p class="hint">Nenhum avistamento recebido.</p>'}`;
-    } catch { /* A própria RLS pode limitar os registros. */ }
+      let proposed = [];
+      try { proposed = await D.listSightingPublicLocations(rows.map((row) => row.id)); }
+      catch (error) { console.error("[BuscaPet][avistamentos]", { code: error?.code, cause: error?.message }); }
+      if (ticket !== generation) return;
+      const locations = new Map(proposed.map((point) => [point.sighting_id, point]));
+      target.innerHTML = `<h2 class="section-heading">Avistamentos recebidos (${rows.length})</h2>${rows.length ? `<div class="timeline">${rows.map((row) => {
+        const point = locations.get(row.id);
+        return `<article><b>${esc(row.area_description)}</b><p>${esc(row.description)}</p>${row.direction ? `<p>Direção informada: ${esc(row.direction)}</p>` : ""}<small>${fmtDate(row.observed_at, true)} · ${row.status === "pending" ? "Aguardando revisão" : row.status === "reviewed" ? "Revisado" : "Rejeitado"}</small>${point ? `<p class="hint">Região proposta para publicação: ${esc(point.public_description)}. ${point.approved_by_tutor ? "Divulgação autorizada." : "Ainda não divulgada."}</p>` : ""}<div class="actions">${row.status === "pending" ? `<button type="button" class="btn secondary small" data-action="review-sighting" data-id="${esc(row.id)}" data-status="reviewed">Marcar como revisado</button><button type="button" class="btn secondary small" data-action="review-sighting" data-id="${esc(row.id)}" data-status="rejected">Rejeitar relato</button>` : ""}${row.status === "reviewed" && point ? `<button type="button" class="btn secondary small" data-action="publish-sighting" data-id="${esc(row.id)}" data-approved="${!point.approved_by_tutor}">${point.approved_by_tutor ? "Retirar do mapa" : "Autorizar região no mapa"}</button>` : ""}</div></article>`;
+      }).join("")}</div>` : '<p class="hint">Nenhum avistamento recebido.</p>'}`;
+    } catch (error) { console.error("[BuscaPet][avistamentos]", { code: error?.code, cause: error?.message }); }
   }
   function authPage(heading, intro, form) {
     setPage(`<div class="auth-page"><section class="auth-form-panel"><a class="logo auth-logo" href="#home">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><div class="auth-heading"><h1>${esc(heading)}</h1><p>${esc(intro)}</p></div>${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ""}${form}</section><aside class="auth-context"><img src="assets/hex.png" alt="Cão ilustrativo"><div><p class="eyebrow">BuscaPet</p><h2>Uma conta para acompanhar suas buscas.</h2><p>Organize alertas e receba pistas da comunidade.</p></div></aside></div>`, heading);
@@ -369,6 +492,21 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
     if (id && (!row || row.reporter_id !== user()?.id)) return unavailable("Alerta indisponível");
     const kind = row?.type || (type === "found" ? "found" : "lost");
     setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Adicionar fotos cadastradas do meu animal a este alerta.</span></label><p class="hint full">A confirmação associa até cinco fotos do animal a este alerta. Elas só aparecem no feed se o alerta for público.</p><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
+    const grid = document.querySelector("#real-occurrence-form .form-grid");
+    if (kind === "lost" && grid) {
+      grid.insertAdjacentHTML("beforeend", pointPickerMarkup("occurrence"));
+      let initial = null;
+      if (id) {
+        try { initial = await D.getOccurrencePublicLocation(id); }
+        catch (error) { console.error("[BuscaPet][localização]", { code: error?.code, cause: error?.message }); }
+      }
+      if (ticket !== generation) return;
+      mountPointPicker("occurrence", initial);
+      if (initial) {
+        grid.querySelector('[name="location_description"]').value = initial.public_description || "";
+        grid.querySelector('[name="location_consent"]').checked = true;
+      }
+    }
   }
   async function dashboard(ticket) {
     const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
@@ -381,6 +519,20 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
     if (ticket !== generation) return;
     if (!row || row.status !== "active" || row.visibility !== "public") return unavailable("Este alerta não recebe avistamentos");
     setPage(shell("Registrar avistamento", "Descreva o local aproximado e o momento da observação.", `<p class="notice">O envio sem conta ainda está indisponível. Você está entrando com sua conta para registrar esta pista.</p><form class="form" id="real-sighting-form" data-id="${esc(id)}"><label>Área aproximada *<input class="control" name="area_description" maxlength="200" required></label><label>Quando você viu o animal? *<input class="control" type="datetime-local" name="observed_at" value="${nowLocal()}" max="${nowLocal()}" required><span class="hint">Você pode informar qualquer data e horário anterior ao momento atual.</span></label><button type="button" class="btn secondary small" data-action="sighting-now">Vi o animal agora</button><label>Descrição *<textarea class="control" name="description" minlength="5" maxlength="2000" required></textarea></label><p class="hint">Não inclua endereço residencial ou dados de terceiros. Coordenadas exatas não serão coletadas neste formulário.</p><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Enviar avistamento</button></form>`, true), "Registrar avistamento");
+    const form = document.querySelector("#real-sighting-form");
+    const description = form?.elements.description?.closest("label");
+    description?.insertAdjacentHTML("beforebegin", '<label>Direção observada (opcional)<input class="control" name="direction" maxlength="200" placeholder="Ex.: seguiu em direção à praça"></label>');
+    form?.querySelector(".form-error")?.insertAdjacentHTML("beforebegin", pointPickerMarkup("sighting"));
+    let initial = null;
+    try { initial = await D.getOccurrencePublicLocation(id); }
+    catch (error) { console.error("[BuscaPet][localização]", { code: error?.code, cause: error?.message }); }
+    if (ticket !== generation) return;
+    mountPointPicker("sighting", initial);
+    // The occurrence point only centers the picker; it is not an observed sighting.
+    selectedPoint = null;
+    const status = document.querySelector("#point-selection-status");
+    if (status) status.textContent = "Nenhuma região do avistamento marcada.";
+    if (initial) document.querySelector('[name="location_consent"]').checked = false;
   }
   function account() {
     const current = user();
@@ -419,7 +571,10 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
       }
       chrome(route === "map" ? "mapa" : route);
       if (route === "home") await home(ticket);
-      else if (route === "mapa" || route === "map") mapPage();
+      else if (route === "mapa" || route === "map") {
+        if (id) mapMode = "real";
+        realMapPage(id);
+      }
       else if (route === "services") servicesPage();
       else if (route === "pet") await detail(id, ticket);
       else if (route === "login") login();
@@ -504,7 +659,19 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
         if (!form.dataset.id) { data.type = formValue(form, "type"); data.visibility = formValue(form, "visibility"); }
         const selected = form.elements.photo.files?.[0];
         const file = selected ? await preparePhoto(selected) : null;
+        const point = selectedPoint;
+        if (point && !form.elements.location_consent?.checked)
+          throw Error("Confirme a divulgação da região aproximada ou remova o marcador.");
         const row = form.dataset.id ? await D.updateOccurrence(form.dataset.id, data) : await D.createOccurrence(data);
+        if (point) {
+          try { await D.saveOccurrencePublicLocation(row.id, {
+            ...point, description: formValue(form, "location_description"), consent: true,
+          }); }
+          catch (error) { notice = `Alerta salvo, mas a região não foi publicada: ${fail(error)}`; }
+        } else if (form.dataset.id && removeExistingPoint) {
+          try { await D.deleteOccurrencePublicLocation(row.id); }
+          catch (error) { notice = `Alerta salvo, mas a região não foi removida: ${fail(error)}`; }
+        }
         if (form.elements.reuse_pet_photos?.checked && data.pet_id) {
           try { await D.reusePetPhotosForOccurrence(data.pet_id, row.id); }
           catch (error) { notice = `Alerta salvo, mas as fotos do animal não foram reutilizadas: ${fail(error)}`; }
@@ -520,8 +687,20 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
         const observed = new Date(formValue(form, "observed_at"));
         if (!Number.isFinite(observed.getTime()) || observed.getTime() > Date.now() + 60_000)
           throw Error("A data e a hora do avistamento não podem estar no futuro.");
-        await D.createSighting({ occurrence_id: form.dataset.id, observed_at: observed.toISOString(), area_description: formValue(form, "area_description"), description: formValue(form, "description") });
-        message("Avistamento registrado para o responsável.");
+        const point = selectedPoint;
+        if (point && !form.elements.location_consent?.checked)
+          throw Error("Confirme a divulgação futura da região aproximada ou remova o marcador.");
+        const sighting = await D.createSighting({ occurrence_id: form.dataset.id,
+          observed_at: observed.toISOString(), area_description: formValue(form, "area_description"),
+          direction: formValue(form, "direction"), description: formValue(form, "description") });
+        if (point) {
+          try { await D.saveSightingPublicLocation(sighting.id, {
+            ...point, description: formValue(form, "location_description") || formValue(form, "area_description"), consent: true,
+          }); }
+          catch (error) { notice = `Avistamento recebido, mas a região não foi associada: ${fail(error)}`; }
+        }
+        message(notice || "Avistamento registrado para o responsável. A região só aparecerá após revisão e autorização.");
+        notice = "";
         navigate(url("pet", form.dataset.id));
       }
     });
@@ -550,7 +729,29 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
     try {
       if (action === "map-mode") {
         mapMode = target.dataset.mode === "demo" ? "demo" : "real";
-        mapPage();
+        if (mapMode === "demo" && mapOccurrenceId) navigate("#mapa");
+        else realMapPage(mapOccurrenceId);
+      } else if (action === "apply-map-filters" || action === "refresh-map") {
+        await loadRealMapPoints({ useViewport: action === "refresh-map" });
+      } else if (action === "choose-center") {
+        pointPicker?.chooseCenter();
+      } else if (action === "clear-point") {
+        const kind = document.querySelector("#occurrence-point-map") ? "occurrence" : "sighting";
+        pointPicker?.destroy();
+        pointPicker = null;
+        mountPointPicker(kind);
+        removeExistingPoint = kind === "occurrence";
+        const consent = document.querySelector('[name="location_consent"]');
+        if (consent) consent.checked = false;
+      } else if (action === "review-sighting") {
+        await D.reviewSighting(target.dataset.id, target.dataset.status);
+        const occurrenceId = routeInfo().id;
+        await showSightings(occurrenceId, generation);
+        message(target.dataset.status === "reviewed" ? "Relato revisado. Autorize a região separadamente para aparecer no mapa." : "Relato rejeitado.");
+      } else if (action === "publish-sighting") {
+        await D.setSightingPublication(target.dataset.id, target.dataset.approved === "true");
+        await showSightings(routeInfo().id, generation);
+        message(target.dataset.approved === "true" ? "Região autorizada no mapa." : "Região retirada do mapa.");
       } else if (action === "focus-map-point") {
         if (!mapController?.focus(target.dataset.id)) message("Este ponto não está visível com os filtros atuais.");
       } else if (action === "use-location") {
@@ -623,7 +824,7 @@ import { createSearchMap, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-ma
   function onChange(event) {
     if (event.target.dataset.mapFilter) {
       mapFilters[event.target.dataset.mapFilter] = event.target.checked;
-      if (mapController) mapController.setPoints(mapMode === "demo" ? DEMO_MAP_POINTS : [], mapFilters);
+      if (mapController) mapController.setPoints(mapPoints, mapFilters, { fit: false });
       return;
     }
     if (event.target.id === "real-type") { filters.type = event.target.value; void render(); }

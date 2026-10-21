@@ -114,10 +114,10 @@ const chrome = process.env.CHROME_PATH || [
     await page.goto(base + "/#mapa", { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Mapa da busca" }).waitFor();
     assert.equal(await page.locator("#search-map").count(), 1);
-    assert.equal(await page.getByText("Quando um ponto público for registrado, ele aparecerá aqui.").count(), 1);
+    await page.locator("#map-results-status").filter({ hasText: /pontos publicados|ponto publicado|não estão disponíveis/ }).waitFor();
     await page.getByRole("button", { name: "Ver exemplo ilustrativo" }).click();
     await page.locator("#search-map.leaflet-container").waitFor();
-    assert.equal(await page.locator(".bp-map-icon").count(), 4);
+    assert.equal(await page.locator(".bp-map-icon").count(), 6);
     if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, "real-mapa-demo-1440.png"), fullPage: true });
     await page.locator('input[data-map-filter="sighting"]').uncheck();
     assert.equal(await page.locator(".bp-map-icon.sighting").count(), 0);

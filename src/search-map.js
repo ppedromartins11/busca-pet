@@ -34,12 +34,15 @@ function markerIcon(point) {
 
 function popup(point) {
   const meta = categoryMeta[point.category];
-  return `<article class="bp-map-popup"><p>${escape(meta.label)} · ${escape(point.state)}</p><h2>${escape(point.title)}</h2><p>${escape(point.region)}</p>${point.time ? `<time>${escape(point.time)}</time>` : ""}<p>${escape(point.description)}</p></article>`;
+  const detail = /^[0-9a-f-]{36}$/i.test(point.occurrenceId || "")
+    ? `<a href="#pet/${encodeURIComponent(point.occurrenceId)}">Ver alerta</a>` : "";
+  return `<article class="bp-map-popup"><p>${escape(meta.label)}${point.state ? ` · ${escape(point.state)}` : ""}</p><h2>${escape(point.title)}</h2><p>${escape(point.region)}</p>${point.time ? `<time>${escape(point.time)}</time>` : ""}<p>${escape(point.description || "")}</p>${point.radius_m ? `<p>Área aproximada: raio de ${escape(point.radius_m)} m</p>` : ""}${detail}</article>`;
 }
 
 export function createSearchMap(container, { onTilesError } = {}) {
   const map = L.map(container, { zoomControl: true, keyboard: true, scrollWheelZoom: true, preferCanvas: true });
   const markers = new Map();
+  const circles = [];
   const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors",
     maxZoom: 19,
@@ -52,18 +55,29 @@ export function createSearchMap(container, { onTilesError } = {}) {
   map.setView([-20.4697, -54.6201], 12);
 
   return {
-    setPoints(points, filters = {}) {
+    setPoints(points, filters = {}, { fit = true } = {}) {
       markers.forEach((marker) => marker.remove());
       markers.clear();
+      circles.forEach((circle) => circle.remove());
+      circles.length = 0;
       const visible = points.filter((point) => filters[point.category] !== false);
       for (const point of visible) {
         const marker = L.marker([point.latitude, point.longitude], {
           icon: markerIcon(point), title: `${categoryMeta[point.category].label}: ${point.title}`, alt: `${categoryMeta[point.category].label}: ${point.title}`, keyboard: true,
         }).addTo(map).bindPopup(popup(point), { maxWidth: 300, autoPanPadding: [24, 24] });
         markers.set(point.id, marker);
+        if (point.radius_m) circles.push(L.circle([point.latitude, point.longitude], {
+          radius: point.radius_m, color: categoryMeta[point.category].className === "sighting" ? "#236caf" : "#b63838",
+          fillOpacity: 0.11, weight: 1, interactive: false,
+        }).addTo(map));
       }
-      if (visible.length) map.fitBounds(L.latLngBounds(visible.map((point) => [point.latitude, point.longitude])), { padding: [32, 32], maxZoom: 14, animate: false });
-      else map.setView([-20.4697, -54.6201], 12, { animate: false });
+      if (fit && visible.length) map.fitBounds(L.latLngBounds(visible.map((point) => [point.latitude, point.longitude])), { padding: [32, 32], maxZoom: 14, animate: false });
+      else if (fit && !visible.length) map.setView([-15.8, -51.9], 4, { animate: false });
+    },
+    getSearchArea() {
+      const center = map.getCenter();
+      const radius_m = Math.ceil(center.distanceTo(map.getBounds().getNorthEast()));
+      return radius_m <= 500000 ? { latitude: center.lat, longitude: center.lng, radius_m: Math.max(1000, radius_m) } : null;
     },
     focus(pointId) {
       const marker = markers.get(pointId);
@@ -87,3 +101,32 @@ export function createSearchMap(container, { onTilesError } = {}) {
 }
 
 export const MAP_CATEGORY_META = categoryMeta;
+
+export function createPointPicker(container, { initial = null, center = null, onChange } = {}) {
+  const map = L.map(container, { keyboard: true, scrollWheelZoom: true });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors", maxZoom: 19,
+  }).addTo(map);
+  const starting = initial || center;
+  map.setView(starting ? [starting.latitude, starting.longitude] : [-15.8, -51.9], starting ? 12 : 4);
+  let marker = null;
+  let circle = null;
+  const choose = ({ lat, lng }) => {
+    const latitude = Number(lat.toFixed(2));
+    const longitude = Number(lng.toFixed(2));
+    const position = [latitude, longitude];
+    if (marker) marker.setLatLng(position);
+    else marker = L.marker(position, { draggable: true, title: "Região aproximada escolhida" })
+      .addTo(map).on("dragend", () => choose(marker.getLatLng()));
+    if (circle) circle.setLatLng(position);
+    else circle = L.circle(position, { radius: 900, color: "#683bb4", fillOpacity: 0.12 }).addTo(map);
+    onChange?.({ latitude, longitude, radius_m: 900 });
+  };
+  map.on("click", (event) => choose(event.latlng));
+  if (initial) choose({ lat: initial.latitude, lng: initial.longitude });
+  return {
+    invalidateSize() { map.invalidateSize({ pan: false }); },
+    chooseCenter() { choose(map.getCenter()); },
+    destroy() { map.remove(); },
+  };
+}

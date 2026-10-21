@@ -154,6 +154,26 @@ function validPhoto(file) {
   return extension;
 }
 
+function approximatePoint(input) {
+  if (input?.latitude == null || input?.longitude == null
+    || input.latitude === "" || input.longitude === "")
+    problem("VALIDATION", "Escolha uma região aproximada válida no mapa.");
+  const latitude = Number(input?.latitude);
+  const longitude = Number(input?.longitude);
+  const radius = Number(input?.radius_m ?? 900);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
+    || !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+    || !Number.isInteger(radius) || radius < 800 || radius > 10000)
+    problem("VALIDATION", "Escolha uma região aproximada válida no mapa.");
+  if (input?.consent !== true)
+    problem("VALIDATION", "Confirme que deseja divulgar esta região aproximada.");
+  return {
+    approx_location: `POINT(${longitude.toFixed(2)} ${latitude.toFixed(2)})`,
+    radius_m: radius,
+    consented_at: new Date().toISOString(),
+  };
+}
+
 /** Browser-side operations use the publishable key and the current Auth session.
  * Authorization remains in database RLS and the narrow public RPC wrappers.
  */
@@ -239,6 +259,55 @@ export function createRemoteStore(client) {
     async getOccurrence(id) {
       return checked(configured().from("occurrences").select().eq("id", requiredUuid(id, "Ocorrência")).maybeSingle());
     },
+    async getOccurrencePublicLocation(id) {
+      const rows = await checked(configured().rpc("get_occurrence_public_location", {
+        p_occurrence: requiredUuid(id, "Ocorrência"),
+      }));
+      return rows?.[0] || null;
+    },
+    async saveOccurrencePublicLocation(id, input) {
+      await currentUser();
+      const point = approximatePoint(input);
+      const occurrenceId = requiredUuid(id, "Ocorrência");
+      const row = {
+        occurrence_id: occurrenceId, ...point,
+        public_description: optionalText(input.description, "Referência da região", 200),
+      };
+      const existing = await api.getOccurrencePublicLocation(occurrenceId);
+      return existing
+        ? one(configured().from("occurrence_public_locations").update({
+          ...point, public_description: row.public_description,
+        })
+          .eq("occurrence_id", occurrenceId).select("occurrence_id,radius_m,public_description"), "Localização")
+        : one(configured().from("occurrence_public_locations").insert(row)
+          .select("occurrence_id,radius_m,public_description"), "Localização");
+    },
+    async deleteOccurrencePublicLocation(id) {
+      await currentUser();
+      await checked(configured().from("occurrence_public_locations").delete()
+        .eq("occurrence_id", requiredUuid(id, "Ocorrência")));
+      return true;
+    },
+    async listPublicMapPoints(filters = {}) {
+      const occurrence = filters.occurrenceId
+        ? requiredUuid(filters.occurrenceId, "Ocorrência") : null;
+      const center = filters.center || null;
+      if (center && (!Number.isFinite(center.latitude) || !Number.isFinite(center.longitude)
+        || !Number.isInteger(center.radius_m)))
+        problem("VALIDATION", "Área de busca inválida.");
+      const since = filters.since ? dateTime(filters.since, "Período") : null;
+      return checked(configured().rpc("search_public_map_points", {
+        p_occurrence: occurrence,
+        p_center_lat: center?.latitude ?? null,
+        p_center_lon: center?.longitude ?? null,
+        p_radius_m: center?.radius_m ?? null,
+        p_city: filters.city?.trim() || null,
+        p_region: filters.region?.trim() || null,
+        p_status: filters.status || null,
+        p_since: since,
+        p_limit: Math.min(200, Math.max(1, Number(filters.limit) || 100)),
+      }));
+    },
     async createOccurrence(input) {
       const { id } = await currentUser();
       return one(configured().from("occurrences").insert({ ...cleanOccurrence(input), reporter_id: id }).select(), "Ocorrência");
@@ -269,6 +338,30 @@ export function createRemoteStore(client) {
         }
       }
       return row;
+    },
+    async saveSightingPublicLocation(id, input) {
+      await currentUser();
+      const point = approximatePoint(input);
+      return one(configured().from("sighting_public_locations").insert({
+        sighting_id: requiredUuid(id, "Avistamento"), ...point,
+        public_description: requiredText(input.description, "Descrição pública da área", 2, 200),
+      }).select("sighting_id,approved_by_tutor,public_description"), "Localização do avistamento");
+    },
+    async listSightingPublicLocations(sightingIds) {
+      await currentUser();
+      if (!Array.isArray(sightingIds)) problem("VALIDATION", "Lista de avistamentos inválida.");
+      const ids = [...new Set(sightingIds.map((id) => requiredUuid(id, "Avistamento")))];
+      if (!ids.length) return [];
+      return checked(configured().from("sighting_public_locations")
+        .select("sighting_id,public_description,approved_by_tutor,consented_at")
+        .in("sighting_id", ids));
+    },
+    async setSightingPublication(id, approved) {
+      await currentUser();
+      return one(configured().from("sighting_public_locations")
+        .update({ approved_by_tutor: approved === true })
+        .eq("sighting_id", requiredUuid(id, "Avistamento"))
+        .select("sighting_id,approved_by_tutor"), "Localização do avistamento");
     },
     async addSightingCoordinates(id, latitude, longitude) {
       await currentUser();
