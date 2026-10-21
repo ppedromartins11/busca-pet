@@ -1,0 +1,12 @@
+{
+  "name": "buscapet-guest-ingress",
+  "main": "index.js",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [{ "name": "GUEST_RATE_LIMITER", "class_name": "GuestRateLimiter" }]
+  },
+  "exports": {
+    "GuestRateLimiter": { "type": "durable-object", "storage": "sqlite" }
+  }
+}
