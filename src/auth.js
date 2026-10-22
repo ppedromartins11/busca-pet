@@ -31,9 +31,13 @@
     const copy = (value) => value == null ? null : JSON.parse(JSON.stringify(value));
     const normalizedEmail = V.normalizeEmail;
     const authError = (code, message, details = {}) => Object.assign(Error(message), { code, ...details });
-    const notify = () => {
+    const comparableUser = (value) => value && JSON.stringify({
+      id: value.id, email: value.email, roles: [...value.roles].sort(), activeRole: value.activeRole,
+      status: value.status, partnerStatus: value.partner?.status || null,
+    });
+    const notify = (change) => {
       for (const listener of listeners) {
-        try { listener(copy(currentUser)); } catch { authIssue = "Não foi possível atualizar a interface de sessão."; }
+        try { listener(copy(currentUser), change); } catch { authIssue = "Não foi possível atualizar a interface de sessão."; }
       }
     };
     const unwrap = (result, message) => {
@@ -46,13 +50,15 @@
       expiresAt: new Date(session.expires_at * 1000).toISOString(),
       persistent: true,
     } : null;
-    const setEmpty = (expired = false) => {
+    const setEmpty = (expired = false, reason = "signed-out") => {
+      const previousUserId = currentUser?.id || null;
+      const hadIdentity = Boolean(currentSession || currentUser);
       authEpoch += 1;
       currentSession = null;
       currentUser = null;
       recoveryGranted = false;
       sessionExpired ||= expired;
-      notify();
+      if (hadIdentity) notify({ kind: reason, relevant: true, signedOutUserId: previousUserId });
     };
     const pendingRead = () => {
       try {
@@ -101,8 +107,8 @@
         unwrap(await supabase.rpc("switch_active_role", { p_role: "colaborador" }), "Não foi possível ativar a função Colaborador.");
       pendingWrite(null);
     }
-    async function hydrate(session, { onboarding = true } = {}) {
-      if (!session) { setEmpty(); return null; }
+    async function hydrate(session, { onboarding = true, event = "INITIAL_SESSION" } = {}) {
+      if (!session) { setEmpty(false, "signed-out"); return null; }
       const epoch = authEpoch;
       const { data: identity, error: identityError } = await supabase.auth.getUser();
       if (identityError || !identity?.user || identity.user.id !== session.user.id)
@@ -120,12 +126,13 @@
       if (epoch !== authEpoch) return copy(currentUser);
       if (profile.status !== "active") {
         await supabase.auth.signOut();
-        setEmpty();
+        setEmpty(false, "account-suspended");
         throw authError("ACCOUNT_SUSPENDED", "Esta conta está suspensa. Consulte a moderação.");
       }
       const granted = roles.map((row) => row.role).filter((role) => ALL_ROLES.includes(role));
       if (!granted.includes(profile.active_role))
         throw authError("ROLE_INCONSISTENT", "O perfil contém uma função sem concessão válida.");
+      const previousComparable = comparableUser(currentUser);
       currentSession = sessionView(session);
       currentUser = {
         id: identity.user.id,
@@ -146,25 +153,30 @@
           status: partner.status,
         } : null,
       };
-      notify();
+      const changed = previousComparable !== comparableUser(currentUser);
+      if (changed) notify({
+        kind: previousComparable ? "identity-or-permissions-changed" : "signed-in",
+        event, relevant: true,
+      });
       return copy(currentUser);
     }
     supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") recoveryGranted = true;
-      if (event === "SIGNED_OUT") { setEmpty(); return; }
+      if (event === "SIGNED_OUT") { setEmpty(false, "signed-out"); return; }
       if (explicitAuthOperation && event === "SIGNED_IN") return;
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || event === "PASSWORD_RECOVERY") {
         // A chamada ao Data API deve ocorrer fora do callback do GoTrue.
-        setTimeout(() => hydrate(session).catch((error) => {
+        setTimeout(() => hydrate(session, { event }).catch((error) => {
           authIssue = error.message;
-          setEmpty();
+          // Falha transitória de perfil no refresh não é logout.
+          if (event !== "TOKEN_REFRESHED") setEmpty(false, "session-invalid");
         }), 0);
       }
     });
     const ready = (async () => {
       try {
         const data = unwrap(await supabase.auth.getSession(), "Não foi possível recuperar a sessão.");
-        if (data.session) await hydrate(data.session);
+        if (data.session) await hydrate(data.session, { event: "INITIAL_SESSION" });
       } catch (error) {
         authIssue = error.message;
         setEmpty();

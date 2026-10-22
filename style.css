@@ -508,6 +508,9 @@ button {
   display: block;
   margin-top: 8px;
 }
+.draft-status:empty {
+  display: none;
+}
 .notice {
   padding: 16px 20px;
   border-left: 3px solid var(--purple);

@@ -5,6 +5,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   "use strict";
   const A = window.BPAuth;
   const D = window.BPRemoteStore;
+  const Drafts = window.BPDrafts;
   const { escape: esc, icon, fmtDate, empty } = window.BPViews;
   const root = document.querySelector("#main-content");
   const species = { dog: "Cão", cat: "Gato", other: "Outro" };
@@ -36,6 +37,29 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   };
+  const draftMarkup = () => '<p class="hint draft-status" role="status" aria-live="polite"></p><button class="btn plain small" type="button" data-action="discard-draft">Descartar rascunho</button>';
+  function enableDraft(form, formType, recordId, fields, serverUpdatedAt = null) {
+    if (!form || !user()?.id || !Drafts) return { restored: false };
+    form.dataset.draftType = formType;
+    form.dataset.draftId = recordId || "new";
+    let status = form.querySelector(".draft-status");
+    if (!status) {
+      form.querySelector(".form-error")?.insertAdjacentHTML("afterend", draftMarkup());
+      status = form.querySelector(".draft-status");
+    }
+    return Drafts.attach(form, {
+      userId: user().id, formType, recordId: recordId || "new", fields, serverUpdatedAt,
+      onStatus: (text) => {
+        if (!status) return;
+        status.textContent = text.startsWith("Os dados") && status.textContent
+          ? `${status.textContent} ${text}` : text;
+      },
+    });
+  }
+  function clearFormDraft(form) {
+    if (form?.dataset.draftType && user()?.id)
+      Drafts?.clear(user().id, form.dataset.draftType, form.dataset.draftId || "new");
+  }
   async function preparePhoto(file) {
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type) || !file.size || file.size > 5 * 1024 * 1024)
@@ -477,6 +501,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     if (ticket !== generation) return;
     if (id && !row) return unavailable("Animal indisponível");
     setPage(shell(id ? "Editar animal" : "Cadastrar animal", "Dados visíveis somente para você nesta área.", `<form class="form form-page" id="real-pet-form" data-id="${esc(id || "")}"><div class="form-grid"><label>Nome ou identificação *<input class="control" name="name" value="${esc(row?.name || "")}" maxlength="80" required></label><label>Espécie *<select class="control" name="species" required>${Object.entries(species).map(([key, label]) => `<option value="${key}" ${row?.species === key ? "selected" : ""}>${label}</option>`).join("")}</select></label><label>Raça<input class="control" name="breed" value="${esc(row?.breed || "")}" maxlength="120"></label><label>Sexo<select class="control" name="sex"><option value="">Não informado</option><option value="female" ${row?.sex === "female" ? "selected" : ""}>Fêmea</option><option value="male" ${row?.sex === "male" ? "selected" : ""}>Macho</option><option value="unknown" ${row?.sex === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Porte<select class="control" name="size"><option value="">Não informado</option><option value="small" ${row?.size === "small" ? "selected" : ""}>Pequeno</option><option value="medium" ${row?.size === "medium" ? "selected" : ""}>Médio</option><option value="large" ${row?.size === "large" ? "selected" : ""}>Grande</option><option value="unknown" ${row?.size === "unknown" ? "selected" : ""}>Desconhecido</option></select></label><label>Pelagem<input class="control" name="coat_description" value="${esc(row?.coat_description || "")}" maxlength="500"></label><label class="full">Características marcantes<textarea class="control" name="distinctive_features" maxlength="500">${esc(row?.distinctive_features || "")}</textarea></label><label class="full">Fotografias<input class="control" id="pet-photo-input" type="file" name="pet_photos" accept="image/jpeg,image/png,image/webp" multiple><span class="hint">Foto de capa e até quatro fotos adicionais. JPEG, PNG ou WebP, até 5 MiB por arquivo.</span></label><div class="photo-preview-list full" id="pet-photo-preview" aria-live="polite"></div></div>${id ? '<section><h2 class="section-heading">Fotos cadastradas</h2><div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div></section>' : ""}<p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">Salvar animal</button><a class="btn secondary" href="#meus-animais">Cancelar</a></div></form>`, true), id ? "Editar animal" : "Cadastrar animal");
+    enableDraft(document.querySelector("#real-pet-form"), "pet", id || "new", ["name", "species", "breed", "sex", "size", "coat_description", "distinctive_features"], row?.updated_at);
     if (id) void showPetPhotos(id, ticket, "pet-photo-gallery");
   }
   async function petDetail(id, ticket) {
@@ -507,6 +532,11 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         grid.querySelector('[name="location_consent"]').checked = true;
       }
     }
+    const occurrenceDraft = enableDraft(document.querySelector("#real-occurrence-form"), `occurrence-${kind}`, id || "new", ["pet_id", "city", "region", "public_reference", "last_seen_at", "reward", "description", "type", "visibility", "reuse_pet_photos", "location_description"], row?.updated_at);
+    if (occurrenceDraft.restored && kind === "lost") {
+      const status = document.querySelector("#real-occurrence-form .draft-status");
+      if (status) status.textContent += " Selecione novamente a região no mapa para continuar.";
+    }
   }
   async function dashboard(ticket) {
     const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
@@ -533,6 +563,11 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const status = document.querySelector("#point-selection-status");
     if (status) status.textContent = "Nenhuma região do avistamento marcada.";
     if (initial) document.querySelector('[name="location_consent"]').checked = false;
+    const sightingDraft = enableDraft(form, "sighting", id, ["area_description", "observed_at", "direction", "description", "location_description"]);
+    if (sightingDraft.restored) {
+      const status = form?.querySelector(".draft-status");
+      if (status) status.textContent += " Selecione novamente a região no mapa para continuar.";
+    }
   }
   function account() {
     const current = user();
@@ -650,6 +685,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           try { await D.uploadPetPhoto(row.id, file); }
           catch (error) { uploadFailure = fail(error); break; }
         }
+        clearFormDraft(form);
         message(uploadFailure ? `Animal salvo, mas uma foto não foi enviada: ${uploadFailure}` : "Animal salvo.");
         navigate(url("animal", row.id));
       } else if (form.id === "real-occurrence-form") {
@@ -680,6 +716,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           try { await D.uploadOccurrencePhoto(row.id, file); }
           catch (error) { notice = `Alerta salvo, mas a foto não foi enviada: ${fail(error)}`; }
         }
+        clearFormDraft(form);
         message(notice || "Alerta salvo.");
         notice = "";
         navigate(url("pet", row.id));
@@ -699,6 +736,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           }); }
           catch (error) { notice = `Avistamento recebido, mas a região não foi associada: ${fail(error)}`; }
         }
+        clearFormDraft(form);
         message(notice || "Avistamento registrado para o responsável. A região só aparecerá após revisão e autorização.");
         notice = "";
         navigate(url("pet", form.dataset.id));
@@ -770,6 +808,12 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         catch (error) { navigate(previousRoute); throw error; }
         message("");
         notice = "Sessão encerrada.";
+        void render();
+      } else if (action === "discard-draft") {
+        const form = target.closest("form");
+        if (!form || !window.confirm("Descartar o rascunho deste formulário? Esta ação não pode ser desfeita.")) return;
+        clearFormDraft(form);
+        message("Rascunho descartado.");
         void render();
       } else if (action === "retry") void render();
       else if (action === "sighting-now") {

@@ -14,6 +14,10 @@
   if (app.onChange) document.addEventListener("change", app.onChange);
   if (app.onKeydown) document.addEventListener("keydown", app.onKeydown);
   if (app.onBreakpoint) responsiveQuery?.addEventListener("change", app.onBreakpoint);
-  if (window.BPSupabase?.configured) window.BPAuth.onChange?.(() => app.render());
+  if (window.BPSupabase?.configured) window.BPAuth.onChange?.((_, change) => {
+    if (change?.signedOutUserId) window.BPDrafts?.clearUser(change.signedOutUserId);
+    // TOKEN_REFRESHED não muda a interface e não pode recriar o formulário ativo.
+    if (change?.relevant !== false) app.render();
+  });
   app.render();
 })();
