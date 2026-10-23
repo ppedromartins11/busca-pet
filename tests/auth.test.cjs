@@ -97,9 +97,11 @@ test("uma conta pode reunir Tutor e Colaborador", async () => {
   assert.equal(A.getSession().userId, user.id);
 });
 
-test("cadastro rejeita ausência de função e função inicial alheia", () => {
+test("cadastro simplificado aceita Conta BuscaPet sem escolha explícita e rejeita função inicial alheia", () => {
   const { A } = boot();
-  assert.equal(A.validateSignUp({ ...base, roles: [] }).valid, false);
+  const simple = { ...base };
+  delete simple.roles;
+  assert.deepEqual([...A.validateSignUp(simple).roles], ["tutor"]);
   const result = A.validateSignUp({
     ...base,
     roles: ["tutor", "colaborador"],

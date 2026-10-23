@@ -4,11 +4,11 @@
 
   const C = window.BPConfig;
   const routes = Object.freeze({
-    post: { requiresAuth: true, roles: ["tutor"] },
-    publicar: { requiresAuth: true, roles: ["tutor"] },
-    editar: { requiresAuth: true, roles: ["tutor"] },
-    operacao: { requiresAuth: true, roles: ["tutor", "colaborador"] },
-    avistamento: { requiresAuth: true, roles: ["tutor", "colaborador"] },
+    post: { requiresAuth: true, common: true },
+    publicar: { requiresAuth: true, common: true },
+    editar: { requiresAuth: true, common: true },
+    operacao: { requiresAuth: true, common: true },
+    avistamento: { requiresAuth: true, common: true },
     denunciar: {
       requiresAuth: true,
       roles: ["tutor", "colaborador", "parceiro"],
@@ -19,13 +19,13 @@
     },
     perfil: { requiresAuth: true },
     "minha-conta": { requiresAuth: true },
-    "painel-tutor": { requiresAuth: true, roles: ["tutor"] },
+    "painel-tutor": { requiresAuth: true, common: true },
     "painel-colaborador": {
       requiresAuth: true,
       roles: ["colaborador"],
     },
     "painel-parceiro": { requiresAuth: true, roles: ["parceiro"] },
-    admin: { requiresAuth: true, roles: ["moderador"] },
+    admin: { requiresAuth: true, roles: ["administrador"] },
   });
 
   function parse(hash) {
@@ -52,10 +52,11 @@
     const user = auth.getCurrentUser();
     if (user && !user.emailVerified)
       return { status: "verify-email", meta };
+    if (meta.common && !["tutor", "colaborador"].some((role) => auth.hasRole(role)))
+      return { status: "limited", meta, availableRoles: [] };
     if (
       meta.roles?.length &&
-      (!meta.roles.includes(auth.getActiveRole()) ||
-        !auth.hasRole(auth.getActiveRole()))
+      !meta.roles.some((role) => auth.hasRole(role))
     )
       return {
         status: "limited",

@@ -71,7 +71,7 @@ test("guard preserva informação de sessão expirada", () => {
   assert.equal(router.access("publicar").expired, false);
 });
 
-test("guard separa verificação de e-mail e função ativa", () => {
+test("guard mantém verificação de e-mail, mas não bloqueia conta comum pela função ativa", () => {
   const { router, state } = boot();
   state.session = { userId: "pessoa" };
   state.user = { id: "pessoa", emailVerified: false, roles: ["tutor", "colaborador"] };
@@ -79,21 +79,19 @@ test("guard separa verificação de e-mail e função ativa", () => {
   assert.equal(router.access("operacao").status, "verify-email");
   state.user.emailVerified = true;
   state.activeRole = "parceiro";
-  const result = router.access("operacao");
-  assert.equal(result.status, "limited");
-  assert.deepEqual([...result.availableRoles], ["tutor", "colaborador"]);
+  assert.equal(router.access("operacao").status, "allowed");
 });
 
-test("conta multifunção acessa rota pela única função ativa", () => {
+test("conta comum acessa publicação sem alternar função ativa", () => {
   const { router, state } = boot();
   state.session = { userId: "pessoa" };
   state.user = { id: "pessoa", emailVerified: true, roles: ["tutor", "colaborador"] };
   state.activeRole = "colaborador";
   assert.equal(router.access("operacao").status, "allowed");
-  assert.equal(router.access("publicar").status, "limited");
+  assert.equal(router.access("publicar").status, "allowed");
 });
 
-test("permissão combina função ativa e relação com o recurso", () => {
+test("permissão comum ignora função ativa, mas preserva relação com o recurso", () => {
   const { permissions, state } = boot();
   state.session = { userId: "pessoa" };
   state.user = { id: "pessoa", emailVerified: true, roles: ["tutor", "colaborador"] };
@@ -107,7 +105,18 @@ test("permissão combina função ativa e relação com o recurso", () => {
     false,
   );
   state.activeRole = "colaborador";
-  assert.equal(permissions.can("editAlert", { userId: "pessoa" }), false);
+  assert.equal(permissions.can("editAlert", { userId: "pessoa" }), true);
+});
+
+test("administração exige papel concedido, não apenas active_role", () => {
+  const { permissions, state } = boot();
+  state.session = { userId: "pessoa" };
+  state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor"] };
+  state.activeRole = "administrador";
+  assert.equal(permissions.can("manageAccount", { userId: "pessoa" }), false);
+  state.user.roles.push("administrador");
+  state.activeRole = "tutor";
+  assert.equal(permissions.can("manageAccount", { userId: "pessoa" }), true);
 });
 
 test("retorno de login é consumido uma única vez", () => {

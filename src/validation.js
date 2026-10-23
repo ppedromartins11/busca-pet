@@ -51,7 +51,10 @@
     const errors = {};
     let cleanEmail = normalizeEmail(data.email);
     const name = String(data.name || "").trim();
-    const roles = publicRoles(data.roles);
+    // Toda conta pública sem escolha explícita nasce como Conta BuscaPet.
+    // Uma tentativa explícita de enviar um papel não público continua inválida.
+    const suppliedRoles = Array.isArray(data.roles);
+    const roles = suppliedRoles ? publicRoles(data.roles) : ["tutor"];
     if (name.length < 2 || name.length > 80)
       errors.name = "Informe um nome entre 2 e 80 caracteres.";
     try {
@@ -66,7 +69,7 @@
     }
     if (String(data.password || "") !== String(data.passwordConfirmation || ""))
       errors.passwordConfirmation = "As senhas precisam ser iguais.";
-    if (!roles.length) errors.roles = "Escolha ao menos uma forma de participar.";
+    if (suppliedRoles && !roles.length) errors.roles = "Escolha uma forma de participar válida.";
     if (roles.length > 1 && !roles.includes(data.activeRole))
       errors.activeRole = "Escolha uma área inicial entre as funções selecionadas.";
     if (!data.acceptTerms) errors.acceptTerms = "Aceite os Termos de Uso.";

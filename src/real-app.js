@@ -461,7 +461,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     authPage("Entre no BuscaPet", "Use seu e-mail e senha.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>`);
   }
   function registration() {
-    authPage("Crie sua conta", "Cadastre-se para publicar e acompanhar alertas.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="collaborator"><span>Também quero colaborar em buscas.</span></label><label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
+    authPage("Crie sua conta", "Uma Conta BuscaPet permite publicar alertas, registrar avistamentos e cuidar dos seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
   }
   function forgot() {
     authPage("Recuperar senha", "Se houver uma conta para este e-mail, enviaremos instruções.", `<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><p class="form-error" role="alert"></p><p class="form-success" role="status"></p><button class="btn primary" type="submit">Enviar instruções</button><a href="#login">Voltar ao login</a></form>`);
@@ -542,7 +542,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
     if (ticket !== generation) return;
     const active = occurrences.filter((row) => row.status === "active").length;
-    setPage(shell("Minha área", "Dados atualizados do Supabase.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Criar alerta</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrences.length}</b><span>Meus alertas</span></div><div><b>${active}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar.")}`), "Minha área");
+    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrences.length}</b><span>Meus alertas</span></div><div><b>${active}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar.")}`), "Minha área");
   }
   async function sightingForm(id, ticket) {
     const row = await D.getOccurrence(id);
@@ -569,9 +569,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       if (status) status.textContent += " Selecione novamente a região no mapa para continuar.";
     }
   }
-  function account() {
+  function renderAccount() {
     const current = user();
-    setPage(shell("Minha conta", "Sessão e funções autorizadas no Supabase.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Funções</dt><dd>${esc(current.roles.join(", "))}</dd></div></dl>${current.roles.length > 1 ? `<label>Função ativa<select class="control" id="real-role">${current.roles.map((role) => `<option value="${esc(role)}" ${role === current.activeRole ? "selected" : ""}>${esc(role)}</option>`).join("")}</select></label>` : ""}<div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">Apenas funções concedidas no servidor podem ser usadas. O perfil Tutor é criado no cadastro.</p>`, true), "Minha conta");
+    setPage(shell("Minha conta", "Dados da sua Conta BuscaPet.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Tipo de conta</dt><dd>Conta BuscaPet</dd></div></dl><div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">As permissões sensíveis são verificadas no servidor. Recursos administrativos não são exibidos nesta versão.</p>`, true), "Minha conta");
+  }
+  function account() {
+    renderAccount();
+    const current = user();
+    document.querySelector("#real-screen .account-details")?.insertAdjacentHTML("afterend", `<form class="form" id="real-account-form"><label>Nome de exibição<input class="control" name="full_name" value="${esc(current.name)}" minlength="2" maxlength="80" required></label><p class="form-error" role="alert"></p><button class="btn secondary" type="submit">Salvar nome</button></form>`);
   }
   function unavailable(heading = "Página indisponível") {
     setPage(shell(heading, "Este recurso não está disponível no MVP conectado.", '<a class="btn primary" href="#home">Voltar aos alertas</a>', true), heading);
@@ -653,7 +658,12 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     event.preventDefault();
     if (!form.reportValidity()) return;
     await busy(form, async () => {
-      if (form.id === "real-login") {
+      if (form.id === "real-account-form") {
+        await D.updateProfile({ full_name: formValue(form, "full_name") });
+        await A.refresh();
+        message("Dados da conta atualizados.");
+        void render();
+      } else if (form.id === "real-login") {
         await A.signIn(formValue(form, "email"), formValue(form, "password"));
         message("Entrada realizada.");
         navigate(returnAfterLogin());
@@ -661,7 +671,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         const passwordValue = formValue(form, "password");
         if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation")) throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
         verificationEmail = formValue(form, "email");
-        const result = await A.signUp({ name: formValue(form, "name"), email: verificationEmail, password: passwordValue, passwordConfirmation: formValue(form, "passwordConfirmation"), roles: form.elements.collaborator.checked ? ["tutor", "colaborador"] : ["tutor"], activeRole: "tutor", acceptTerms: true, acceptPrivacy: true });
+        const result = await A.signUp({ name: formValue(form, "name"), email: verificationEmail, password: passwordValue, passwordConfirmation: formValue(form, "passwordConfirmation"), roles: ["tutor"], activeRole: "tutor", acceptTerms: true, acceptPrivacy: true });
         notice = result.needsEmailConfirmation ? "Confira seu e-mail para ativar a conta." : "Conta criada.";
         navigate(result.needsEmailConfirmation ? "#verificar-email" : "#painel-tutor");
       } else if (form.id === "real-forgot") {
@@ -873,10 +883,6 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
     if (event.target.id === "real-type") { filters.type = event.target.value; void render(); }
     if (event.target.id === "real-status") { filters.status = event.target.value; void render(); }
-    if (event.target.id === "real-role") A.setActiveRole(event.target.value).then(() => {
-      message("Função ativa atualizada.");
-      void render();
-    }).catch((error) => { message(fail(error)); void render(); });
     if (event.target.id === "pet-photo-input") {
       const preview = document.querySelector("#pet-photo-preview");
       if (!preview) return;

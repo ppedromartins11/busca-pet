@@ -59,6 +59,11 @@ const chrome = process.env.CHROME_PATH || [
       for (const [route, heading] of Object.entries(routeHeadings)) {
         await page.goto(base + "/#" + route, { waitUntil: "domcontentloaded" });
         await page.getByRole("heading", { name: heading }).waitFor();
+        if (route === "registro") {
+          assert.equal(await page.locator('#real-registration [name="collaborator"]').count(), 0);
+          assert.equal(await page.locator('#real-registration [name="acceptTerms"]').count(), 1);
+          assert.equal(await page.locator('#real-registration [name="acceptPrivacy"]').count(), 1);
+        }
         if (["home", "login", "registro", "services", "mapa", "sobre"].includes(route) && [390, 1440].includes(width) && process.env.SCREENSHOT_DIR) {
           fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
           await page.screenshot({

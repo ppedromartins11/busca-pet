@@ -5,19 +5,13 @@
 (() => {
   "use strict";
 
+  const commonRoles = Object.freeze(["tutor", "colaborador"]);
   const actionRoles = Object.freeze({
-    publishAlert: ["tutor"],
-    editAlert: ["tutor"],
-    resolveAlert: ["tutor"],
-    reopenAlert: ["tutor"],
-    manageParticipant: ["tutor"],
-    reviewSighting: ["tutor"],
-    createTask: ["tutor"],
-    updateTask: ["tutor", "colaborador"],
-    createSighting: ["tutor", "colaborador"],
+    publishAlert: commonRoles, editAlert: commonRoles, resolveAlert: commonRoles,
+    reopenAlert: commonRoles, manageParticipant: commonRoles, reviewSighting: commonRoles,
+    createTask: commonRoles, updateTask: commonRoles, createSighting: commonRoles,
     createReport: ["tutor", "colaborador", "parceiro"],
-    moderate: ["moderador"],
-    manageAccount: ["moderador"],
+    moderate: ["moderador", "administrador"], manageAccount: ["administrador"],
   });
 
   function can(action, resource = {}) {
@@ -27,13 +21,13 @@
     // esta camada; em produção, a autorização decisiva permanece no RLS.
     if (!auth) return false;
     const user = auth.getCurrentUser();
-    const activeRole = auth.getActiveRole();
     const allowed = actionRoles[action];
     if (
       !user ||
+      !auth.getSession?.() ||
+      (user.status && user.status !== "active") ||
       !allowed ||
-      !allowed.includes(activeRole) ||
-      !auth.hasRole(activeRole) ||
+      !allowed.some((role) => auth.hasRole(role)) ||
       (resource.userId && resource.userId !== user.id)
     )
       return false;
@@ -51,12 +45,13 @@
 
   function require(action, resource = {}) {
     if (!can(action, resource))
-      throw Error("A função ativa não permite esta ação.");
+      throw Error("Sua conta não permite esta ação.");
     return true;
   }
 
   window.BPPermissions = {
     actionRoles,
+    commonRoles,
     can,
     require,
     requireSession: () => window.BPAuth?.requireSession(),
