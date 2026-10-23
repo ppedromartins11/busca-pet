@@ -155,7 +155,7 @@ const chrome = process.env.CHROME_PATH || [
       location.hash = "#admin";
     });
     await page.getByRole("heading", { name: "Acesso negado" }).waitFor();
-    assert.equal(await page.getByText("Indicadores protegidos", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("Acesso protegido", { exact: true }).count(), 1);
 
     // A listagem usa respostas sintéticas somente no navegador local: a RPC e
     // sua autorização real são validadas em pgTAP, sem consultar dados remotos.

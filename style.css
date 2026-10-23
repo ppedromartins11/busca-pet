@@ -904,6 +904,44 @@ button {
 }
 .admin-user-controls label { display: grid; gap: 5px; color: var(--ink); font-size: 0.84rem; font-weight: 700; }
 .admin-user-controls .control { width: 100%; }
+.admin-occurrence-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-subtle);
+}
+.admin-occurrence-controls label { display: grid; gap: 5px; color: var(--ink); font-size: 0.84rem; font-weight: 700; }
+.admin-occurrence-controls .control { width: 100%; }
+.admin-occurrence-search { grid-column: span 2; }
+.admin-occurrence-list { display: grid; gap: 14px; margin-top: 18px; }
+.admin-occurrence-card { display: grid; grid-template-columns: minmax(140px, 190px) minmax(0, 1fr); gap: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.admin-occurrence-cover { min-height: 140px; overflow: hidden; border-radius: 10px; background: var(--surface-subtle); }
+.admin-occurrence-cover img,
+.admin-occurrence-photos img { display: block; width: 100%; height: 100%; max-height: 220px; object-fit: cover; }
+.admin-occurrence-cover .photo-placeholder { min-height: 140px; }
+.admin-occurrence-copy { display: grid; justify-items: start; gap: 8px; min-width: 0; }
+.admin-occurrence-copy h3,
+.admin-occurrence-copy p { margin: 0; }
+.admin-occurrence-copy h3 span { color: var(--muted); font-size: 0.86em; font-weight: 500; }
+.admin-occurrence-copy small { overflow-wrap: anywhere; color: var(--muted); }
+.admin-occurrence-copy code,
+.admin-occurrence-detail code { overflow-wrap: anywhere; }
+.admin-occurrence-description { max-width: 75ch; white-space: pre-wrap; }
+.admin-occurrence-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.admin-tag { display: inline-flex; align-items: center; min-height: 25px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); background: var(--lavender); font-size: 0.76rem; font-weight: 800; }
+.admin-tag.lost { color: var(--danger); }
+.admin-tag.found { color: var(--green); }
+.admin-occurrence-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 14px; }
+.admin-occurrence-photos figure { min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
+.admin-occurrence-photos img { height: 180px; }
+.admin-occurrence-photos figcaption { padding: 8px; color: var(--muted); font-size: 0.78rem; }
+.admin-occurrence-detail .admin-content-heading h2 { margin: 8px 0; }
+.admin-occurrence-detail .admin-account-action form { display: grid; gap: 10px; }
+.admin-occurrence-detail textarea { min-height: 120px; resize: vertical; }
 .admin-user-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
 .admin-user-table-wrap:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
 .admin-user-table { width: 100%; min-width: 760px; border-collapse: collapse; text-align: left; }
@@ -953,6 +991,8 @@ button {
   .admin-nav { grid-template-columns: minmax(0, 220px); padding: 0 0 14px; border-right: 0; border-bottom: 1px solid var(--line); }
   .admin-user-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-user-search { grid-column: 1 / -1; }
+  .admin-occurrence-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-occurrence-search { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .admin-area { padding: 24px 20px 44px; }
@@ -962,6 +1002,10 @@ button {
   .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-user-controls { grid-template-columns: 1fr; }
   .admin-user-search { grid-column: auto; }
+  .admin-occurrence-controls { grid-template-columns: 1fr; }
+  .admin-occurrence-search { grid-column: auto; }
+  .admin-occurrence-card { grid-template-columns: minmax(0, 1fr); }
+  .admin-occurrence-cover { max-height: 240px; }
   .admin-pagination { display: grid; }
   .admin-pagination > div { flex-wrap: wrap; }
 }

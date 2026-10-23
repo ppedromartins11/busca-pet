@@ -136,6 +136,43 @@ test("suspensão administrativa usa RPCs protegidos, valida o motivo e lê hist�
   await assert.rejects(store.changeAdminUserStatus(USER_ID, "suspended", "curto"), { code: "VALIDATION" });
 });
 
+test("moderação administrativa usa RPCs dedicados, valida filtros e exige justificativa", async () => {
+  const { client, calls } = clientMock((call) => {
+    if (call.name === "admin_list_occurrences") return {
+      data: [{ occurrence_id: OCCURRENCE_ID, total_count: 25 }], error: null,
+    };
+    if (call.name === "admin_get_occurrence") return {
+      data: [{ occurrence_id: OCCURRENCE_ID, photos: [] }], error: null,
+    };
+    if (call.name === "admin_moderate_occurrence") return {
+      data: [{ occurrence_id: OCCURRENCE_ID, visibility: "under_review", action: "occurrence_hidden" }], error: null,
+    };
+    if (call.name === "admin_list_occurrence_audit") return {
+      data: [{ actor_name: "Moderadora", action: "occurrence_hidden", reason: "Duplicidade confirmada no relato.", total_count: 1 }], error: null,
+    };
+    return { data: null, error: null };
+  });
+  const store = createRemoteStore(client);
+  const page = await store.listAdminOccurrences({
+    query: OCCURRENCE_ID, type: "lost", status: "active", visibility: "public",
+    createdFrom: "2026-10-01", createdTo: "2026-10-23", page: 2, pageSize: 20,
+  });
+  const detail = await store.getAdminOccurrence(OCCURRENCE_ID);
+  const changed = await store.moderateAdminOccurrence(OCCURRENCE_ID, "hide", "Duplicidade confirmada no relato.");
+  const audit = await store.listAdminOccurrenceAudit(OCCURRENCE_ID, { page: 1, pageSize: 20 });
+  assert.equal(page.total, 25);
+  assert.equal(detail.occurrence_id, OCCURRENCE_ID);
+  assert.equal(changed.action, "occurrence_hidden");
+  assert.equal(audit.entries[0].actor_name, "Moderadora");
+  assert.deepEqual(calls.find((call) => call.name === "admin_list_occurrences")?.params, {
+    p_query: OCCURRENCE_ID, p_type: "lost", p_status: "active", p_visibility: "public",
+    p_created_from: "2026-10-01", p_created_to: "2026-10-23", p_page: 2, p_page_size: 20,
+  });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+  await assert.rejects(store.listAdminOccurrences({ createdFrom: "2026-02-31" }), { code: "VALIDATION" });
+  await assert.rejects(store.moderateAdminOccurrence(OCCURRENCE_ID, "hide", "curta"), { code: "VALIDATION" });
+});
+
 test("RPC administrativa ausente informa que a funcionalidade ainda não foi publicada", async () => {
   const { client } = clientMock((call) => call.name === "admin_list_users"
     ? { data: null, error: { code: "PGRST202" } }

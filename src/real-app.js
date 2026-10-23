@@ -30,6 +30,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   let mapOccurrenceId = "";
   let mapQueryGeneration = 0;
   const adminDirectory = { query: "", status: "", role: "", order: "newest", page: 1, pageSize: 20, request: 0, searchTimer: null };
+  const adminOccurrences = { query: "", type: "", status: "", visibility: "", createdFrom: "", createdTo: "", page: 1, pageSize: 20, request: 0, searchTimer: null };
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -132,12 +133,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   function chrome(route) {
     const logged = Boolean(user());
     const admin = window.BPPermissions?.can("viewAdminDashboard");
+    const moderator = window.BPPermissions?.can("moderate");
     const links = [
       ["home", "Início", "home"],
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
       ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
-      ...(admin ? [["admin", "Administração", "user"]] : []),
+      ...(admin ? [["admin", "Administração", "user"]]
+        : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
     ];
     const nav = links.map(([path, label, glyph]) => `<a href="#${path}" ${path.split("/")[0] === route ? 'aria-current="page" class="active"' : ""}>${glyph ? icon(glyph) : ""}${label}</a>`).join("");
     const actions = logged
@@ -559,7 +562,16 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   const adminRoleLabels = Object.freeze({ tutor: "Tutor", colaborador: "Colaborador", parceiro: "Parceiro", moderador: "Moderador", administrador: "Administrador" });
   function adminNavigation(active) {
-    return `<nav class="admin-nav" aria-label="Navegação administrativa"><a class="${active === "overview" ? "active" : ""}" href="#admin" ${active === "overview" ? 'aria-current="page"' : ""}>${icon("home")}Visão geral</a><a class="${active === "users" ? "active" : ""}" href="#admin/usuarios" ${active === "users" ? 'aria-current="page"' : ""}>${icon("user")}Usuários</a></nav>`;
+    const links = [
+      ...(window.BPPermissions?.can("viewAdminDashboard") ? [
+        ["overview", "#admin", "Visão geral", "home"],
+        ["users", "#admin/usuarios", "Usuários", "user"],
+      ] : []),
+      ...(window.BPPermissions?.can("moderate") ? [
+        ["occurrences", "#admin/ocorrencias", "Ocorrências", "search"],
+      ] : []),
+    ];
+    return `<nav class="admin-nav" aria-label="Navegação administrativa">${links.map(([key, href, label, glyph]) => `<a class="${active === key ? "active" : ""}" href="${href}" ${active === key ? 'aria-current="page"' : ""}>${icon(glyph)}${label}</a>`).join("")}</nav>`;
   }
   function adminFrame(active, content) {
     return `<main class="admin-area" aria-label="Painel administrativo"><header class="admin-header"><div><span class="admin-eyebrow">Área administrativa</span><h1>Painel administrativo</h1><p>Consultas administrativas com acesso verificado no banco.</p></div><div class="admin-header-actions"><a class="btn secondary" href="#painel-tutor">${icon("home")}Área comum</a><button class="btn plain" type="button" data-action="logout">Sair</button></div></header><div class="admin-layout">${adminNavigation(active)}${content}</div></main>`;
@@ -656,8 +668,127 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       if (ticket === generation) setPage(adminFrame("users", `<section class="admin-content" aria-labelledby="admin-user-detail-title"><div class="admin-content-heading"><h2 id="admin-user-detail-title">Gestão de usuários</h2></div>${adminDirectoryFailure(error, "detail")}</section>`), "Gestão de usuários");
     }
   }
+  const moderationStatus = Object.freeze({ active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" });
+  const moderationVisibility = Object.freeze({ public: "Visível", under_review: "Oculto para análise" });
+  function adminOccurrenceFailure(error, section = "list") {
+    const title = error?.code === "NOT_PUBLISHED" ? "Funcionalidade ainda não publicada"
+      : error?.code === "DENIED" || error?.code === "AUTH_REQUIRED" ? "Acesso negado"
+        : error?.code === "NOT_FOUND" && section === "detail" ? "Ocorrência não encontrada"
+          : "Não foi possível carregar";
+    const body = error?.code === "NOT_PUBLISHED"
+      ? "A fila de moderação ainda não está disponível neste ambiente. Nenhum dado foi simulado."
+      : error?.code === "DENIED" || error?.code === "AUTH_REQUIRED"
+        ? "Sua conta não está autorizada a consultar ocorrências de moderação."
+        : error?.code === "NOT_FOUND" && section === "detail"
+          ? "A ocorrência não existe ou não está disponível para esta análise."
+          : "Não foi possível concluir a consulta. Tente novamente.";
+    const retry = section === "detail" ? "admin-occurrence-retry-detail" : "admin-occurrence-retry";
+    return `<div class="notice"><strong>${title}</strong><p>${body}</p><button class="btn secondary small" type="button" data-action="${retry}">Tentar novamente</button></div>`;
+  }
+  function adminOccurrencesMarkup() {
+    const controls = `<form class="admin-occurrence-controls" id="admin-occurrence-controls" aria-label="Filtros de ocorrências">
+      <label class="admin-occurrence-search" for="admin-occurrence-query">Buscar por protocolo, animal ou informação pública<input class="control" id="admin-occurrence-query" type="search" maxlength="120" autocomplete="off" value="${esc(adminOccurrences.query)}" placeholder="Nome do animal ou identificador"></label>
+      <label for="admin-occurrence-type">Tipo<select class="control" id="admin-occurrence-type"><option value="">Todos</option><option value="lost" ${adminOccurrences.type === "lost" ? "selected" : ""}>Desaparecido</option><option value="found" ${adminOccurrences.type === "found" ? "selected" : ""}>Encontrado</option></select></label>
+      <label for="admin-occurrence-status">Situação<select class="control" id="admin-occurrence-status"><option value="">Todas</option>${Object.entries(moderationStatus).map(([key, label]) => `<option value="${key}" ${adminOccurrences.status === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label for="admin-occurrence-visibility">Visibilidade<select class="control" id="admin-occurrence-visibility"><option value="">Todas</option>${Object.entries(moderationVisibility).map(([key, label]) => `<option value="${key}" ${adminOccurrences.visibility === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label for="admin-occurrence-from">Criada a partir de<input class="control" id="admin-occurrence-from" type="date" value="${esc(adminOccurrences.createdFrom)}"></label>
+      <label for="admin-occurrence-to">Criada até<input class="control" id="admin-occurrence-to" type="date" value="${esc(adminOccurrences.createdTo)}"></label>
+    </form>`;
+    return adminFrame("occurrences", `<section class="admin-content" aria-labelledby="admin-occurrences-title"><div class="admin-content-heading"><h2 id="admin-occurrences-title">Moderação de ocorrências</h2><p>Consulte publicações visíveis e ocultas para análise. A fila não inclui registros privados nem localizações exatas.</p></div>${controls}<p id="admin-occurrence-results-status" class="hint" role="status" aria-live="polite">Carregando ocorrências…</p><div id="admin-occurrence-results" aria-live="polite" aria-busy="true"></div></section>`);
+  }
+  function adminOccurrenceListMarkup(result) {
+    const rows = result.occurrences || [];
+    if (!rows.length) return `<div class="notice"><strong>${adminOccurrences.query || adminOccurrences.type || adminOccurrences.status || adminOccurrences.visibility || adminOccurrences.createdFrom || adminOccurrences.createdTo ? "Nenhuma ocorrência encontrada" : "Fila vazia"}</strong><p>Não há publicações disponíveis para os filtros selecionados.</p></div>`;
+    const start = (adminOccurrences.page - 1) * adminOccurrences.pageSize + 1;
+    const end = start + rows.length - 1;
+    const pages = Math.max(1, Math.ceil(result.total / adminOccurrences.pageSize));
+    return `<div class="admin-occurrence-list">${rows.map((row) => `<article class="admin-occurrence-card"><div class="admin-occurrence-cover" data-admin-occurrence-photo="${esc(row.occurrence_id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto de capa</small></span></div><div class="admin-occurrence-copy"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.occurrence_visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.occurrence_visibility] || esc(row.occurrence_visibility)}</span></div><h3>${esc(row.pet_name || "Animal sem vínculo")} <span>· ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</span></h3><p>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</p><p class="admin-occurrence-description">${esc(row.description)}</p><small>Criada ${esc(fmtDate(row.created_at, true))} · Protocolo <code>${esc(row.occurrence_id)}</code></small><a class="btn secondary small" href="#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}">Analisar ocorrência</a></div></article>`).join("")}</div><nav class="admin-pagination" aria-label="Paginação de ocorrências"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page - 1}" ${adminOccurrences.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminOccurrences.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page + 1}" ${adminOccurrences.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+  }
+  async function showAdminOccurrenceCovers(rows, ticket) {
+    const entries = rows.filter((row) => row.cover_photo_path);
+    await Promise.all(entries.map(async (row) => {
+      const target = document.querySelector(`[data-admin-occurrence-photo="${CSS.escape(row.occurrence_id)}"]`);
+      if (!target) return;
+      try {
+        const blob = await D.downloadPhoto(row.cover_photo_path);
+        if (ticket !== generation || !target.isConnected) return;
+        const source = URL.createObjectURL(blob);
+        photos.push(source);
+        const image = document.createElement("img");
+        image.src = source;
+        image.alt = `Foto de capa de ${row.pet_name || "animal da ocorrência"}`;
+        image.loading = "lazy";
+        target.replaceChildren(image);
+      } catch { if (ticket === generation && target.isConnected) target.innerHTML = '<span class="photo-placeholder">Foto indisponível</span>'; }
+    }));
+  }
+  async function loadAdminOccurrences(ticket = generation) {
+    const request = ++adminOccurrences.request;
+    const results = document.querySelector("#admin-occurrence-results");
+    const status = document.querySelector("#admin-occurrence-results-status");
+    if (results) results.setAttribute("aria-busy", "true");
+    if (status) status.textContent = "Carregando ocorrências…";
+    try {
+      const result = await D.listAdminOccurrences(adminOccurrences);
+      if (ticket !== generation || request !== adminOccurrences.request || routeInfo().id !== "ocorrencias") return;
+      if (results) { results.innerHTML = adminOccurrenceListMarkup(result); results.removeAttribute("aria-busy"); }
+      if (status) status.textContent = `${metric(result.total)} ${result.total === 1 ? "ocorrência disponível" : "ocorrências disponíveis"}.`;
+      await showAdminOccurrenceCovers(result.occurrences || [], ticket);
+    } catch (error) {
+      if (ticket !== generation || request !== adminOccurrences.request || routeInfo().id !== "ocorrencias") return;
+      if (results) { results.innerHTML = adminOccurrenceFailure(error); results.removeAttribute("aria-busy"); }
+      if (status) status.textContent = "Consulta indisponível.";
+    }
+  }
+  async function adminOccurrencesPage(ticket) {
+    if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    setPage(adminOccurrencesMarkup(), "Moderação de ocorrências");
+    await loadAdminOccurrences(ticket);
+  }
+  function adminOccurrenceAuditMarkup(history) {
+    const entries = history?.entries || [];
+    return `<section class="admin-account-audit" aria-labelledby="admin-occurrence-audit-title"><h3 id="admin-occurrence-audit-title">Histórico de moderação</h3>${entries.length ? `<ol class="admin-audit-list">${entries.map((entry) => `<li><strong>${entry.action === "occurrence_hidden" ? "Ocorrência ocultada" : "Publicação restaurada"}</strong><span>${esc(fmtDate(entry.created_at, true))} · ${esc(entry.actor_name || "Moderador indisponível")}</span>${entry.reason ? `<p><span class="sr-only">Justificativa: </span>${esc(entry.reason)}</p>` : '<p class="hint">Decisão registrada antes da exigência de justificativa.</p>'}</li>`).join("")}</ol>` : '<p class="hint">Nenhuma decisão de moderação registrada.</p>'}</section>`;
+  }
+  async function adminOccurrenceDetails(id, ticket) {
+    if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    if (!UUID.test(id)) {
+      setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure({ code: "NOT_FOUND" }, "detail")}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Ocorrência não encontrada");
+      return;
+    }
+    try {
+      const [row, history] = await Promise.all([
+        D.getAdminOccurrence(id), D.listAdminOccurrenceAudit(id, { page: 1, pageSize: 20 }),
+      ]);
+      if (ticket !== generation) return;
+      const photosMarkup = (row.photos || []).map((photo) => `<figure data-admin-review-photo="${esc(photo.id)}"><span class="photo-placeholder">Carregando fotografia…</span><figcaption>${esc(photo.mime_type)} · ${metric(Math.ceil(photo.byte_size / 1024))} KiB</figcaption></figure>`).join("");
+      const nextAction = row.visibility === "public" ? "hide" : "restore";
+      const actionLabel = nextAction === "hide" ? "Ocultar publicação" : "Restaurar visibilidade pública";
+      const actionNote = nextAction === "hide"
+        ? "A publicação e suas fotos deixarão de aparecer no feed. O status de busca ou reencontro não será alterado."
+        : "A publicação voltará a aparecer no feed. O status de busca ou reencontro não será alterado.";
+      setPage(adminFrame("occurrences", `<section class="admin-content admin-occurrence-detail"><p><a class="back-link" href="#admin/ocorrencias">‹ Voltar à fila</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.visibility] || esc(row.visibility)}</span></div><h2 id="admin-occurrence-title">${esc(row.pet_name || "Animal sem vínculo")} · ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</h2><p>Protocolo <code>${esc(row.occurrence_id)}</code> · Criada ${esc(fmtDate(row.created_at, true))}</p></div><dl class="admin-user-details"><div><dt>Animal</dt><dd>${esc(row.pet_name || "Sem vínculo")} · ${esc(species[row.pet_species] || "Espécie não informada")}</dd></div><div><dt>Data do último registro</dt><dd>${esc(fmtDate(row.last_seen_at, true))}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</dd></div><div><dt>Visibilidade / situação</dt><dd>${moderationVisibility[row.visibility] || esc(row.visibility)} · ${moderationStatus[row.occurrence_status] || esc(row.occurrence_status)}</dd></div><div class="full"><dt>Descrição</dt><dd>${esc(row.description)}</dd></div>${row.pet_breed || row.pet_coat_description || row.pet_distinctive_features ? `<div class="full"><dt>Características informadas do animal</dt><dd>${[row.pet_breed, row.pet_coat_description, row.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><section class="admin-account-audit" aria-labelledby="admin-occurrence-photos-title"><h3 id="admin-occurrence-photos-title">Fotografias vinculadas</h3><div class="admin-occurrence-photos">${photosMarkup || '<p class="hint">Nenhuma foto vinculada a esta ocorrência.</p>'}</div></section><section class="admin-account-action" aria-labelledby="admin-occurrence-decision-title"><h3 id="admin-occurrence-decision-title">Registrar decisão</h3><p>${actionNote}</p><form id="admin-occurrence-moderation-form" data-id="${esc(row.occurrence_id)}" data-action-name="${nextAction}"><label for="admin-occurrence-reason">Justificativa obrigatória<textarea class="control" id="admin-occurrence-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-occurrence-reason-help"></textarea></label><span class="hint" id="admin-occurrence-reason-help">Informe de 10 a 500 caracteres. A decisão será registrada no histórico.</span><p class="form-error" role="alert"></p><button class="btn ${nextAction === "hide" ? "danger" : "primary"}" type="submit">${actionLabel}</button></form></section>${adminOccurrenceAuditMarkup(history)}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Análise de ocorrência");
+      await Promise.all((row.photos || []).map(async (photo) => {
+        const target = document.querySelector(`[data-admin-review-photo="${CSS.escape(photo.id)}"]`);
+        if (!target) return;
+        try {
+          const blob = await D.downloadPhoto(photo.storage_path);
+          if (ticket !== generation || !target.isConnected) return;
+          const source = URL.createObjectURL(blob);
+          photos.push(source);
+          const image = document.createElement("img");
+          image.src = source;
+          image.alt = `Fotografia vinculada à ocorrência ${row.occurrence_id}`;
+          image.loading = "lazy";
+          target.querySelector(".photo-placeholder")?.remove();
+          target.prepend(image);
+        } catch { const placeholder = target.querySelector(".photo-placeholder"); if (placeholder) placeholder.textContent = "Foto indisponível"; }
+      }));
+    } catch (error) {
+      if (ticket === generation) setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure(error, "detail")}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Análise de ocorrência");
+    }
+  }
   function adminDenied() {
-    setPage(shell("Acesso negado", "Esta área exige uma conta administrativa ativa.", `<div class="notice"><strong>Indicadores protegidos</strong><p>Não foi possível autorizar o acesso ao painel administrativo.</p></div><div class="actions"><a class="btn primary" href="#painel-tutor">Voltar à minha área</a></div>`, true), "Acesso negado");
+    setPage(shell("Acesso negado", "Esta área exige uma conta administrativa ou de moderação ativa.", `<div class="notice"><strong>Acesso protegido</strong><p>Não foi possível autorizar o acesso a esta área.</p></div><div class="actions"><a class="btn primary" href="#painel-tutor">Voltar à minha área</a></div>`, true), "Acesso negado");
   }
   async function adminDashboard(ticket) {
     if (!window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
@@ -731,7 +862,9 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         return;
       }
       chrome(route === "map" ? "mapa" : route);
-      if (route === "admin" && !window.BPPermissions?.can("viewAdminDashboard")) {
+      if (route === "admin" && (id === "ocorrencias"
+        ? !window.BPPermissions?.can("moderate")
+        : !window.BPPermissions?.can("viewAdminDashboard"))) {
         adminDenied();
         return;
       }
@@ -757,6 +890,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       else if (route === "admin" && id === "usuarios") {
         if (detailId) await adminUserDetails(detailId, ticket);
         else await adminUsers(ticket);
+      }
+      else if (route === "admin" && id === "ocorrencias") {
+        if (detailId) await adminOccurrenceDetails(detailId, ticket);
+        else await adminOccurrencesPage(ticket);
       }
       else if (route === "admin" && !id) await adminDashboard(ticket);
       else if (route === "admin") unavailable("Página administrativa indisponível");
@@ -785,6 +922,18 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   async function onSubmit(event) {
     const form = event.target;
+    if (form.id === "admin-occurrence-moderation-form") {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      await busy(form, async () => {
+        const result = await D.moderateAdminOccurrence(
+          form.dataset.id, form.dataset.actionName, formValue(form, "reason"),
+        );
+        message(result.action === "occurrence_hidden" ? "Ocorrência ocultada e decisão registrada." : "Visibilidade restaurada e decisão registrada.");
+        await adminOccurrenceDetails(form.dataset.id, generation);
+      });
+      return;
+    }
     if (form.id === "admin-account-status-form") {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -808,6 +957,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       clearTimeout(adminDirectory.searchTimer);
       adminDirectory.page = 1;
       await loadAdminUsers(generation);
+      return;
+    }
+    if (form.id === "admin-occurrence-controls") {
+      event.preventDefault();
+      clearTimeout(adminOccurrences.searchTimer);
+      adminOccurrences.page = 1;
+      await loadAdminOccurrences(generation);
       return;
     }
     if (!form.id?.startsWith("real-")) return;
@@ -945,8 +1101,18 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           adminDirectory.page = page;
           await loadAdminUsers(generation);
         }
+      } else if (action === "admin-occurrence-page") {
+        const page = Number(target.dataset.page);
+        if (Number.isInteger(page) && page >= 1) {
+          adminOccurrences.page = page;
+          await loadAdminOccurrences(generation);
+        }
       } else if (action === "admin-retry") {
         await loadAdminUsers(generation);
+      } else if (action === "admin-occurrence-retry") {
+        await loadAdminOccurrences(generation);
+      } else if (action === "admin-occurrence-retry-detail") {
+        await adminOccurrenceDetails(routeInfo().detailId, generation);
       } else if (action === "admin-account-status") {
         adminAccountStatusDialog(target.dataset.id, target.dataset.name || "Conta", target.dataset.status);
       } else if (action === "map-mode") {
@@ -1037,6 +1203,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "admin-occurrence-query") {
+      adminOccurrences.query = event.target.value;
+      adminOccurrences.page = 1;
+      clearTimeout(adminOccurrences.searchTimer);
+      adminOccurrences.searchTimer = setTimeout(() => { void loadAdminOccurrences(generation); }, 300);
+      return;
+    }
     if (event.target.id === "admin-user-query") {
       adminDirectory.query = event.target.value;
       adminDirectory.page = 1;
@@ -1057,6 +1230,18 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
   }
   function onChange(event) {
+    if (["admin-occurrence-type", "admin-occurrence-status", "admin-occurrence-visibility", "admin-occurrence-from", "admin-occurrence-to"].includes(event.target.id)) {
+      const keys = {
+        "admin-occurrence-type": "type", "admin-occurrence-status": "status",
+        "admin-occurrence-visibility": "visibility", "admin-occurrence-from": "createdFrom",
+        "admin-occurrence-to": "createdTo",
+      };
+      adminOccurrences[keys[event.target.id]] = event.target.value;
+      adminOccurrences.page = 1;
+      clearTimeout(adminOccurrences.searchTimer);
+      void loadAdminOccurrences(generation);
+      return;
+    }
     if (["admin-user-status", "admin-user-role", "admin-user-order"].includes(event.target.id)) {
       const key = event.target.id === "admin-user-status" ? "status"
         : event.target.id === "admin-user-role" ? "role" : "order";

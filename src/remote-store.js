@@ -62,6 +62,16 @@ function dateTime(value, label) {
   return new Date(timestamp).toISOString();
 }
 
+function dateOnly(value, label) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    problem("VALIDATION", `${label} inválida.`);
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
+    problem("VALIDATION", `${label} inválida.`);
+  return value;
+}
+
 function pastDateTime(value, label) {
   const normalized = dateTime(value, label);
   if (Date.parse(normalized) > Date.now() + 60_000)
@@ -87,7 +97,7 @@ function safeError(error) {
   if (code === "P0002")
     return new RemoteStoreError("NOT_FOUND", "O registro solicitado não foi encontrado.", details);
   if (code === "PGRST202")
-    return new RemoteStoreError("NOT_PUBLISHED", "A gestão de usuários ainda não foi publicada neste ambiente.", details);
+    return new RemoteStoreError("NOT_PUBLISHED", "Esta funcionalidade administrativa ainda não foi publicada neste ambiente.", details);
   return new RemoteStoreError("UNAVAILABLE", "Não foi possível concluir a operação. Tente novamente.", details);
 }
 
@@ -281,6 +291,52 @@ export function createRemoteStore(client) {
       await currentUser();
       const rows = await checked(configured().rpc("admin_list_account_status_audit", {
         p_user: requiredUuid(id, "Conta"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const entries = Array.isArray(rows) ? rows : [];
+      return { entries, total: Number(entries[0]?.total_count || 0) };
+    },
+    async listAdminOccurrences(options = {}) {
+      await currentUser();
+      const query = optionalText(options.query, "Busca", 120) || null;
+      const rows = await checked(configured().rpc("admin_list_occurrences", {
+        p_query: query,
+        p_type: adminDirectoryFilter(options.type, ["lost", "found"], "Tipo"),
+        p_status: adminDirectoryFilter(options.status, ["active", "located", "reunited", "closed"], "Situação"),
+        p_visibility: adminDirectoryFilter(options.visibility, ["public", "under_review"], "Visibilidade"),
+        p_created_from: dateOnly(options.createdFrom, "Data inicial"),
+        p_created_to: dateOnly(options.createdTo, "Data final"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const occurrences = Array.isArray(rows) ? rows : [];
+      return { occurrences, total: Number(occurrences[0]?.total_count || 0) };
+    },
+    async getAdminOccurrence(id) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_get_occurrence", {
+        p_occurrence: requiredUuid(id, "Ocorrência"),
+      }));
+      const occurrence = Array.isArray(rows) ? rows[0] : rows;
+      if (!occurrence) problem("NOT_FOUND", "Ocorrência não encontrada ou sem permissão.");
+      return occurrence;
+    },
+    async moderateAdminOccurrence(id, action, reason) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_moderate_occurrence", {
+        p_occurrence: requiredUuid(id, "Ocorrência"),
+        p_action: choice(action, ["hide", "restore"], "Ação de moderação"),
+        p_reason: requiredText(reason, "Justificativa", 10, 500),
+      }));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("NOT_FOUND", "A ocorrência não foi atualizada.");
+      return result;
+    },
+    async listAdminOccurrenceAudit(id, options = {}) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_list_occurrence_audit", {
+        p_occurrence: requiredUuid(id, "Ocorrência"),
         p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
         p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
       }));
