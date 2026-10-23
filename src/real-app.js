@@ -90,10 +90,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   function routeInfo() {
     const [route = "home", raw = "", rawDetail = ""] = location.hash.replace(/^#/, "").split("/");
-    let id = "", detail = "";
+    let id = "", detailId = "";
     try { id = decodeURIComponent(raw); } catch { /* invalid route is handled below */ }
-    try { detail = decodeURIComponent(rawDetail); } catch { /* invalid route is handled below */ }
-    return { route: route || "home", id, detail };
+    try { detailId = decodeURIComponent(rawDetail); } catch { /* invalid route is handled below */ }
+    return { route: route || "home", id, detailId };
   }
   function message(text) {
     const target = document.querySelector("#real-toast");
@@ -117,6 +117,8 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     mapController = null;
     if (pointPicker) pointPicker.destroy();
     pointPicker = null;
+    selectedPoint = null;
+    removeExistingPoint = false;
   }
   function navigate(hash) {
     if (location.hash === hash) void render();
@@ -714,7 +716,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const ticket = ++generation;
     releasePhotos();
     destroyMap();
-    let { route, id, detail } = routeInfo();
+    let { route, id, detailId } = routeInfo();
     setPage(shell("Carregando", "Consultando dados autorizados…", "", true), "Carregando");
     try {
       await A.ready;
@@ -753,7 +755,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       else if (route === "editar") await occurrenceForm(id, "", ticket);
       else if (route === "painel-tutor") await dashboard(ticket);
       else if (route === "admin" && id === "usuarios") {
-        if (detail) await adminUserDetails(detail, ticket);
+        if (detailId) await adminUserDetails(detailId, ticket);
         else await adminUsers(ticket);
       }
       else if (route === "admin" && !id) await adminDashboard(ticket);

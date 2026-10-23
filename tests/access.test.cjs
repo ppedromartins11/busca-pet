@@ -119,12 +119,15 @@ test("administração exige papel concedido, não apenas active_role", () => {
   assert.equal(permissions.can("manageAccount", { userId: "pessoa" }), true);
 });
 
-test("rota administrativa exige conta ativa e papel administrador concedido", () => {
+test("rota administrativa local aceita papéis concedidos, mas dashboard exige administrador ativo", () => {
   const { router, permissions, state } = boot();
   state.session = { userId: "pessoa" };
   state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor"] };
   state.activeRole = "administrador";
   assert.equal(router.access("admin").status, "limited");
+  assert.equal(permissions.can("viewAdminDashboard"), false);
+  state.user.roles.push("moderador");
+  assert.equal(router.access("admin").status, "allowed");
   assert.equal(permissions.can("viewAdminDashboard"), false);
   state.user.roles.push("administrador");
   assert.equal(router.access("admin").status, "allowed");

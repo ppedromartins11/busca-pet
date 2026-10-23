@@ -25,7 +25,9 @@
       roles: ["colaborador"],
     },
     "painel-parceiro": { requiresAuth: true, roles: ["parceiro"] },
-    admin: { requiresAuth: true, roles: ["administrador"] },
+    // No protótipo local, #admin é a fila de moderação. O dashboard conectado
+    // aplica seu guard próprio e exige viewAdminDashboard (administrador).
+    admin: { requiresAuth: true, roles: ["moderador", "administrador"] },
   });
 
   function parse(hash) {

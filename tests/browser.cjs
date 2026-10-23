@@ -282,9 +282,10 @@ const BASE = process.env.BASE_URL || "http://localhost:8000";
   assert.equal(persisted.includes("senha longa de teste"), false);
   await registration.evaluate(() => (location.hash = "post"));
   await registration.waitForFunction(
-    () => document.querySelector(".screen.current")?.id === "acesso-limitado",
+    () => document.querySelector(".screen.current")?.id === "post",
   );
-  assert.match(await rg("h2").textContent(), /Acesso limitado/);
+  assert.equal(await rg('.choices a[href^="#publicar/"]').count(), 2,
+    "a mesma conta colaboradora deve conseguir iniciar alertas perdidos e encontrados");
   await registration.evaluate(() => (location.hash = "operacao/hex"));
   await registration.waitForFunction(
     () => document.querySelector(".screen.current")?.id === "operacao",

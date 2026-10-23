@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test tests/*.test.cjs tests/*.test.mjs",
     "test:browser": "node tests/browser.cjs",
+    "test:browser:regressions": "node tests/browser-regressions.cjs",
     "test:browser:real": "node tests/browser-real.cjs",
     "check": "node --check src/constants.js && node --check src/storage.js && node --check src/validation.js && node --check src/store.js && node --check src/supabase-client.js && node --check src/remote-store.js && node --check src/auth.js && node --check src/drafts.js && node --check src/permissions.js && node --check src/router.js && node --check src/legal.js && node --check src/images.js && node --check src/views.js && node --check src/search-map.js && node --check src/app.js && node --check src/real-app.js && node --check src/events.js && node --check src/main.js && node --check cloudflare/guest-ingress/index.js",
     "dev": "vite",
