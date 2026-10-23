@@ -942,6 +942,50 @@ button {
 .admin-occurrence-detail .admin-content-heading h2 { margin: 8px 0; }
 .admin-occurrence-detail .admin-account-action form { display: grid; gap: 10px; }
 .admin-occurrence-detail textarea { min-height: 120px; resize: vertical; }
+.admin-report-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-subtle);
+}
+.admin-report-controls label { display: grid; gap: 5px; color: var(--ink); font-size: 0.84rem; font-weight: 700; }
+.admin-report-controls .control { width: 100%; }
+.admin-report-search { grid-column: span 2; }
+.admin-report-list { display: grid; gap: 14px; margin-top: 18px; }
+.admin-report-card,
+.admin-report-body,
+.admin-report-related {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+.admin-report-card > header { display: flex; justify-content: space-between; gap: 14px; }
+.admin-report-card h3 { margin: 6px 0; overflow-wrap: anywhere; }
+.admin-report-card header p { margin: 4px 0; color: var(--muted); font-size: 0.86rem; overflow-wrap: anywhere; }
+.admin-report-card code,
+.admin-report-detail code { overflow-wrap: anywhere; }
+.admin-report-category { display: inline-block; color: var(--purple); font-size: 0.82rem; font-weight: 800; }
+.admin-report-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-report-card dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.admin-report-card dl > div { min-width: 0; }
+.admin-report-card dt { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.admin-report-card dd { margin: 4px 0; overflow-wrap: anywhere; }
+.admin-report-metrics { margin: 16px 0 20px; }
+.admin-report-body,
+.admin-report-related { margin-top: 18px; }
+.admin-report-body h3,
+.admin-report-related h3 { margin-top: 0; }
+.admin-report-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.admin-report-detail .admin-account-action form { display: grid; gap: 10px; }
+.admin-report-detail textarea { min-height: 120px; resize: vertical; }
+.report-form-page { margin: 0 auto; }
+.report-form-page .form { margin-top: 18px; }
 .admin-user-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
 .admin-user-table-wrap:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
 .admin-user-table { width: 100%; min-width: 760px; border-collapse: collapse; text-align: left; }
@@ -993,6 +1037,8 @@ button {
   .admin-user-search { grid-column: 1 / -1; }
   .admin-occurrence-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .admin-occurrence-search { grid-column: 1 / -1; }
+  .admin-report-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-report-search { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .admin-area { padding: 24px 20px 44px; }
@@ -1004,7 +1050,11 @@ button {
   .admin-user-search { grid-column: auto; }
   .admin-occurrence-controls { grid-template-columns: 1fr; }
   .admin-occurrence-search { grid-column: auto; }
+  .admin-report-controls { grid-template-columns: 1fr; }
+  .admin-report-search { grid-column: auto; }
   .admin-occurrence-card { grid-template-columns: minmax(0, 1fr); }
+  .admin-report-card > header { display: grid; }
+  .admin-report-card dl { grid-template-columns: 1fr; }
   .admin-occurrence-cover { max-height: 240px; }
   .admin-pagination { display: grid; }
   .admin-pagination > div { flex-wrap: wrap; }

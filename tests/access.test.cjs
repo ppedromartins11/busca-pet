@@ -139,6 +139,22 @@ test("moderação exige papel concedido e conta ativa, mas não exige active_rol
   assert.equal(permissions.can("moderate"), false);
 });
 
+test("usuário autenticado e ativo pode denunciar sem depender de active_role", () => {
+  const { permissions, state } = boot();
+  state.session = { userId: "pessoa" };
+  state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor"] };
+  state.activeRole = "colaborador";
+  assert.equal(permissions.can("createReport"), true);
+  state.user.roles = ["moderador"];
+  state.activeRole = "tutor";
+  assert.equal(permissions.can("createReport"), true);
+  state.user.status = "suspended";
+  assert.equal(permissions.can("createReport"), false);
+  state.user.status = "active";
+  state.session = null;
+  assert.equal(permissions.can("createReport"), false);
+});
+
 test("rota administrativa local aceita papéis concedidos, mas dashboard exige administrador ativo", () => {
   const { router, permissions, state } = boot();
   state.session = { userId: "pessoa" };

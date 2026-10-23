@@ -12,7 +12,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "admin"]);
+  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let photos = [];
@@ -31,6 +31,16 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   let mapQueryGeneration = 0;
   const adminDirectory = { query: "", status: "", role: "", order: "newest", page: 1, pageSize: 20, request: 0, searchTimer: null };
   const adminOccurrences = { query: "", type: "", status: "", visibility: "", createdFrom: "", createdTo: "", page: 1, pageSize: 20, request: 0, searchTimer: null };
+  const reportCategories = Object.freeze({
+    false_misleading: "Informação falsa ou enganosa",
+    suspected_fraud: "Suspeita de golpe ou fraude",
+    inappropriate_content: "Fotografia ou conteúdo inadequado",
+    duplicate_occurrence: "Ocorrência duplicada",
+    misuse_of_information: "Uso indevido de informações",
+    other: "Outro motivo",
+  });
+  const reportStatuses = Object.freeze({ open: "Aberta", in_review: "Em análise", resolved: "Resolvida", dismissed: "Descartada" });
+  const adminReports = { query: "", status: "", category: "", createdFrom: "", createdTo: "", order: "newest", page: 1, pageSize: 20, request: 0, searchTimer: null };
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -409,9 +419,12 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     if (ticket !== generation) return;
     if (!row) return unavailable("Alerta indisponível");
     const mine = row.reporter_id === user()?.id;
-    const canReport = row.status === "active" && row.visibility === "public";
+    const canReport = row.status === "active" && row.visibility === "public" && !mine;
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
-    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${canReport && !user() ? '<p class="hint">O envio sem conta está temporariamente indisponível até a publicação do ingresso protegido.</p>' : ""}${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    const reportLink = canReport
+      ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
+      : "";
+    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
     const mapState = document.createElement("section");
     mapState.className = "occurrence-map-state";
     mapState.innerHTML = '<h2 class="section-heading">Região no mapa</h2><p>Verificando região publicada…</p>';
@@ -427,6 +440,29 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     });
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
+  }
+  async function reportOccurrencePage(id, ticket) {
+    if (!UUID.test(id)) return unavailable("Alerta indisponível para denúncia");
+    if (!window.BPPermissions?.can("createReport")) return adminDenied();
+    const [occurrence, existing] = await Promise.all([
+      D.getOccurrence(id), D.getMyActiveOccurrenceReport(id),
+    ]);
+    if (ticket !== generation) return;
+    if (!occurrence || occurrence.visibility !== "public"
+      || occurrence.status !== "active" || occurrence.reporter_id === user()?.id) {
+      return unavailable("Este alerta não está disponível para denúncia");
+    }
+    const activeReport = existing && reportStatuses[existing.report_status]
+      ? `<div class="notice" role="status"><strong>Você já enviou uma denúncia ativa</strong><p>Situação: ${esc(reportStatuses[existing.report_status])}. O envio repetido não cria outro protocolo.</p></div><a class="btn secondary" href="${url("pet", id)}">Voltar ao alerta</a>`
+      : `<form class="form" id="real-occurrence-report-form" data-id="${esc(id)}">
+          <label for="real-report-category">Motivo da denúncia *<select class="control" id="real-report-category" name="category" required><option value="">Selecione um motivo</option>${Object.entries(reportCategories).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label>
+          <label for="real-report-description">Descrição complementar *<textarea class="control" id="real-report-description" name="description" minlength="10" maxlength="1000" required aria-describedby="real-report-description-help" placeholder="Explique o que deve ser analisado."></textarea></label>
+          <span class="hint" id="real-report-description-help">De 10 a 1.000 caracteres. Não inclua senhas, documentos, contatos ou outros dados pessoais desnecessários.</span>
+          <p class="form-error" role="alert"></p>
+          <p class="hint">A denúncia será analisada pela equipe. Ela não oculta o alerta automaticamente.</p>
+          <button class="btn primary" type="submit">Enviar denúncia</button>
+        </form>`;
+    setPage(shell("Denunciar alerta", "Informe o que merece atenção. A denúncia será encaminhada à equipe de moderação.", `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><section class="narrow report-form-page"><div class="notice"><strong>${esc(occurrence.city)} · ${esc(occurrence.region)}</strong><p>Protocolo do alerta: <code>${esc(id)}</code>. O autor da publicação não verá sua identidade.</p></div>${activeReport}</section>`, true), "Denunciar alerta");
   }
   async function showPhotos(id, ticket) {
     try {
@@ -569,6 +605,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       ] : []),
       ...(window.BPPermissions?.can("moderate") ? [
         ["occurrences", "#admin/ocorrencias", "Ocorrências", "search"],
+        ["reports", "#admin/denuncias", "Denúncias", "shield"],
       ] : []),
     ];
     return `<nav class="admin-nav" aria-label="Navegação administrativa">${links.map(([key, href, label, glyph]) => `<a class="${active === key ? "active" : ""}" href="${href}" ${active === key ? 'aria-current="page"' : ""}>${icon(glyph)}${label}</a>`).join("")}</nav>`;
@@ -787,6 +824,104 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       if (ticket === generation) setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure(error, "detail")}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Análise de ocorrência");
     }
   }
+  function adminReportFailure(error, detail = false) {
+    const title = error?.code === "NOT_PUBLISHED" ? "Denúncias ainda não publicadas"
+      : error?.code === "DENIED" || error?.code === "AUTH_REQUIRED" ? "Acesso negado"
+        : error?.code === "NOT_FOUND" && detail ? "Denúncia indisponível" : "Consulta indisponível";
+    const body = error?.code === "NOT_PUBLISHED"
+      ? "O sistema de denúncias está disponível neste ambiente após aplicar a migration correspondente. Nenhum dado foi simulado."
+      : error?.code === "DENIED" || error?.code === "AUTH_REQUIRED"
+        ? "Sua conta não está autorizada a consultar denúncias administrativas."
+        : error?.code === "NOT_FOUND" && detail
+          ? "A denúncia não existe ou não está disponível para esta análise."
+          : "Não foi possível consultar as denúncias agora. Tente novamente.";
+    const action = detail ? "admin-report-retry-detail" : "admin-report-retry";
+    return `<div class="notice"><strong>${esc(title)}</strong><p>${esc(body)}</p><button class="btn secondary small" type="button" data-action="${action}">Tentar novamente</button></div>`;
+  }
+  function adminReportCountsMarkup(counts) {
+    return `<div class="admin-metrics admin-report-metrics">${adminMetric("search", counts.open_count, "Denúncias abertas")}${adminMetric("calendar", counts.in_review_count, "Em análise")}${adminMetric("heart", counts.resolved_count, "Resolvidas")}${adminMetric("user", counts.dismissed_count, "Descartadas")}</div>`;
+  }
+  function adminReportsMarkup() {
+    const controls = `<form class="admin-report-controls" id="admin-report-controls" aria-label="Filtros de denúncias">
+      <label class="admin-report-search" for="admin-report-query">Buscar por protocolo, alerta ou descrição<input class="control" id="admin-report-query" type="search" maxlength="120" autocomplete="off" value="${esc(adminReports.query)}" placeholder="Identificador ou informação permitida"></label>
+      <label for="admin-report-status">Situação<select class="control" id="admin-report-status"><option value="">Todas</option>${Object.entries(reportStatuses).map(([value, label]) => `<option value="${value}" ${adminReports.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label for="admin-report-category">Motivo<select class="control" id="admin-report-category"><option value="">Todos</option>${Object.entries(reportCategories).map(([value, label]) => `<option value="${value}" ${adminReports.category === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label for="admin-report-from">Enviada a partir de<input class="control" id="admin-report-from" type="date" value="${esc(adminReports.createdFrom)}"></label>
+      <label for="admin-report-to">Enviada até<input class="control" id="admin-report-to" type="date" value="${esc(adminReports.createdTo)}"></label>
+      <label for="admin-report-order">Ordenação<select class="control" id="admin-report-order"><option value="newest" ${adminReports.order === "newest" ? "selected" : ""}>Mais recentes</option><option value="oldest" ${adminReports.order === "oldest" ? "selected" : ""}>Mais antigas</option></select></label>
+    </form>`;
+    return adminFrame("reports", `<section class="admin-content" aria-labelledby="admin-reports-title"><div class="admin-content-heading"><h2 id="admin-reports-title">Denúncias</h2><p>Analise relatos enviados pela comunidade. A identidade do denunciante não aparece nesta fila.</p></div><div id="admin-report-counts" aria-live="polite"><p class="hint">Carregando indicadores…</p></div>${controls}<p id="admin-report-results-status" class="hint" role="status" aria-live="polite">Carregando denúncias…</p><div id="admin-report-results" aria-live="polite" aria-busy="true"></div></section>`);
+  }
+  function adminReportListMarkup(result) {
+    const rows = result.reports || [];
+    if (!rows.length) {
+      const filtered = Boolean(adminReports.query || adminReports.status || adminReports.category || adminReports.createdFrom || adminReports.createdTo);
+      return `<div class="notice"><strong>${filtered ? "Nenhuma denúncia encontrada" : "Fila vazia"}</strong><p>${filtered ? "Ajuste os filtros para consultar outras denúncias." : "As denúncias válidas aparecerão aqui quando forem enviadas."}</p></div>`;
+    }
+    const start = (adminReports.page - 1) * adminReports.pageSize + 1;
+    const end = start + rows.length - 1;
+    const pages = Math.max(1, Math.ceil(result.total / adminReports.pageSize));
+    return `<div class="admin-report-list">${rows.map((row) => `<article class="admin-report-card"><header><div><span class="admin-report-category">${esc(reportCategories[row.category] || row.category)}</span><h3>${esc(row.pet_name || "Alerta relacionado")} · ${esc(reportStatuses[row.report_status] || row.report_status)}</h3><p>Denúncia <code>${esc(row.report_id)}</code></p></div><span class="admin-status ${row.report_status === "open" ? "suspended" : row.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[row.report_status] || row.report_status)}</span></header><p class="admin-report-description">${esc(row.description)}</p><dl><div><dt>Alerta</dt><dd>${esc(row.occurrence_id)}</dd></div><div><dt>Região aproximada</dt><dd>${row.city ? `${esc(row.city)} · ${esc(row.region || "")}` : "Indisponível"}</dd></div><div><dt>Enviada</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div></dl><a class="btn secondary small" href="#admin/denuncias/${encodeURIComponent(row.report_id)}">Analisar denúncia</a></article>`).join("")}</div><nav class="admin-pagination" aria-label="Paginação de denúncias"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page - 1}" ${adminReports.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminReports.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page + 1}" ${adminReports.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+  }
+  async function loadAdminReports(ticket = generation) {
+    const request = ++adminReports.request;
+    const results = document.querySelector("#admin-report-results");
+    const status = document.querySelector("#admin-report-results-status");
+    if (results) results.setAttribute("aria-busy", "true");
+    if (status) status.textContent = "Carregando denúncias…";
+    try {
+      const [counts, result] = await Promise.all([
+        D.getAdminOccurrenceReportCounts(), D.listAdminOccurrenceReports(adminReports),
+      ]);
+      if (ticket !== generation || request !== adminReports.request || routeInfo().id !== "denuncias") return;
+      const countsTarget = document.querySelector("#admin-report-counts");
+      if (countsTarget) countsTarget.innerHTML = adminReportCountsMarkup(counts);
+      if (results) { results.innerHTML = adminReportListMarkup(result); results.removeAttribute("aria-busy"); }
+      if (status) status.textContent = `${metric(result.total)} ${result.total === 1 ? "denúncia encontrada" : "denúncias encontradas"}.`;
+    } catch (error) {
+      if (ticket !== generation || request !== adminReports.request || routeInfo().id !== "denuncias") return;
+      const countsTarget = document.querySelector("#admin-report-counts");
+      if (countsTarget) countsTarget.innerHTML = "";
+      if (results) { results.innerHTML = adminReportFailure(error); results.removeAttribute("aria-busy"); }
+      if (status) status.textContent = "Consulta indisponível.";
+    }
+  }
+  async function adminReportsPage(ticket) {
+    if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    setPage(adminReportsMarkup(), "Denúncias");
+    await loadAdminReports(ticket);
+  }
+  function adminReportHistoryMarkup(history) {
+    const actions = { submitted: "Denúncia recebida", review_started: "Análise iniciada", resolved: "Denúncia resolvida", dismissed: "Denúncia descartada" };
+    const entries = history?.entries || [];
+    return `<section class="admin-account-audit" aria-labelledby="admin-report-history-title"><h3 id="admin-report-history-title">Histórico da denúncia</h3>${entries.length ? `<ol class="admin-audit-list">${entries.map((entry) => `<li><strong>${esc(actions[entry.action] || entry.action)}</strong><span>${esc(fmtDate(entry.created_at, true))} · ${esc(entry.actor_name || "Responsável indisponível")}</span>${entry.reason ? `<p><span class="sr-only">Justificativa: </span>${esc(entry.reason)}</p>` : ""}</li>`).join("")}</ol>` : '<p class="hint">Nenhuma transição registrada.</p>'}</section>`;
+  }
+  async function adminOccurrenceReportDetails(id, ticket) {
+    if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    if (!UUID.test(id)) {
+      setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure({ code: "NOT_FOUND" }, true)}<p><a class="btn secondary" href="#admin/denuncias">Voltar para denúncias</a></p></section>`), "Denúncia indisponível");
+      return;
+    }
+    try {
+      const [report, history] = await Promise.all([
+        D.getAdminOccurrenceReport(id), D.listAdminOccurrenceReportHistory(id, { page: 1, pageSize: 20 }),
+      ]);
+      if (ticket !== generation) return;
+      const occurrenceAvailable = ["public", "under_review"].includes(report.occurrence_visibility);
+      let actionForm = '<p class="hint">Esta denúncia já foi encerrada. O registro e seu histórico permanecem disponíveis para consulta.</p>';
+      if (report.report_status === "open") {
+        actionForm = `<form class="form admin-report-transition-form" id="admin-report-transition-form" data-id="${esc(report.report_id)}"><input type="hidden" name="status" value="in_review"><p>A denúncia ainda está aberta. Inicie a análise para registrar a responsabilidade e liberar uma decisão.</p><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Iniciar análise</button></form>`;
+      } else if (report.report_status === "in_review") {
+        actionForm = `<form class="form admin-report-transition-form" id="admin-report-transition-form" data-id="${esc(report.report_id)}"><label for="admin-report-status-choice">Decisão<select class="control" id="admin-report-status-choice" name="status" required><option value="">Selecione</option><option value="resolved">Resolver denúncia</option><option value="dismissed">Descartar denúncia</option></select></label><label for="admin-report-reason">Justificativa obrigatória<textarea class="control" id="admin-report-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-report-reason-help"></textarea></label><span class="hint" id="admin-report-reason-help">De 10 a 500 caracteres. A justificativa será mantida no histórico administrativo.</span><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Registrar decisão</button></form>`;
+      }
+      const occurrenceMarkup = occurrenceAvailable
+        ? `<dl class="admin-user-details"><div><dt>Identificador do alerta</dt><dd><code>${esc(report.occurrence_id)}</code></dd></div><div><dt>Animal</dt><dd>${esc(report.pet_name || "Sem vínculo")} · ${esc(species[report.pet_species] || "Espécie não informada")}</dd></div><div><dt>Tipo / situação</dt><dd>${esc(types[report.occurrence_type] || "Indisponível")} · ${esc(states[report.occurrence_status] || "Indisponível")}</dd></div><div><dt>Visibilidade</dt><dd>${esc(report.occurrence_visibility === "under_review" ? "Em análise de moderação" : "Pública")}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(report.city)} · ${esc(report.region)}${report.public_reference ? ` · ${esc(report.public_reference)}` : ""}</dd></div><div><dt>Último registro</dt><dd>${esc(fmtDate(report.last_seen_at, true))}</dd></div><div class="full"><dt>Descrição pública do alerta</dt><dd>${esc(report.occurrence_description)}</dd></div>${report.pet_breed || report.pet_coat_description || report.pet_distinctive_features ? `<div class="full"><dt>Características públicas do animal</dt><dd>${[report.pet_breed, report.pet_coat_description, report.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><p><a class="btn secondary" href="#admin/ocorrencias/${encodeURIComponent(report.occurrence_id)}">Abrir moderação do alerta e fotografias autorizadas</a></p>`
+        : `<div class="notice"><strong>Conteúdo do alerta indisponível</strong><p>A visibilidade atual não permite consultar o conteúdo ou as fotografias por esta análise.</p><code>${esc(report.occurrence_id)}</code></div>`;
+      setPage(adminFrame("reports", `<section class="admin-content admin-report-detail"><p><a class="back-link" href="#admin/denuncias">‹ Voltar à fila de denúncias</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-report-category">${esc(reportCategories[report.category] || report.category)}</span><span class="admin-status ${report.report_status === "open" ? "suspended" : report.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[report.report_status] || report.report_status)}</span></div><h2 id="admin-report-title">Análise da denúncia</h2><p>Protocolo <code>${esc(report.report_id)}</code> · Enviada ${esc(fmtDate(report.created_at, true))}</p></div><section class="admin-report-body"><h3>Descrição complementar</h3><p>${esc(report.description)}</p></section><section class="admin-report-related"><h3>Ocorrência relacionada</h3>${occurrenceMarkup}</section><section class="admin-account-action" aria-labelledby="admin-report-decision-title"><h3 id="admin-report-decision-title">Triagem e decisão</h3>${actionForm}</section>${adminReportHistoryMarkup(history)}<p><a class="btn secondary" href="#admin/denuncias">Voltar à fila</a></p></section>`), "Análise da denúncia");
+    } catch (error) {
+      if (ticket === generation) setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure(error, true)}<p><a class="btn secondary" href="#admin/denuncias">Voltar para denúncias</a></p></section>`), "Análise da denúncia");
+    }
+  }
   function adminDenied() {
     setPage(shell("Acesso negado", "Esta área exige uma conta administrativa ou de moderação ativa.", `<div class="notice"><strong>Acesso protegido</strong><p>Não foi possível autorizar o acesso a esta área.</p></div><div class="actions"><a class="btn primary" href="#painel-tutor">Voltar à minha área</a></div>`, true), "Acesso negado");
   }
@@ -862,7 +997,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         return;
       }
       chrome(route === "map" ? "mapa" : route);
-      if (route === "admin" && (id === "ocorrencias"
+      if (route === "admin" && (["ocorrencias", "denuncias"].includes(id)
         ? !window.BPPermissions?.can("moderate")
         : !window.BPPermissions?.can("viewAdminDashboard"))) {
         adminDenied();
@@ -875,6 +1010,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       }
       else if (route === "services") servicesPage();
       else if (route === "pet") await detail(id, ticket);
+      else if (route === "denunciar") await reportOccurrencePage(id, ticket);
       else if (route === "login") login();
       else if (route === "registro") registration();
       else if (route === "esqueci-senha") forgot();
@@ -894,6 +1030,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       else if (route === "admin" && id === "ocorrencias") {
         if (detailId) await adminOccurrenceDetails(detailId, ticket);
         else await adminOccurrencesPage(ticket);
+      }
+      else if (route === "admin" && id === "denuncias") {
+        if (detailId) await adminOccurrenceReportDetails(detailId, ticket);
+        else await adminReportsPage(ticket);
       }
       else if (route === "admin" && !id) await adminDashboard(ticket);
       else if (route === "admin") unavailable("Página administrativa indisponível");
@@ -922,6 +1062,29 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   async function onSubmit(event) {
     const form = event.target;
+    if (form.id === "admin-report-transition-form") {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const status = formValue(form, "status");
+      if (!window.confirm(status === "in_review"
+        ? "Iniciar a análise desta denúncia? A transição ficará no histórico."
+        : `Confirma ${status === "resolved" ? "resolver" : "descartar"} esta denúncia? A decisão ficará registrada no histórico.`)) return;
+      await busy(form, async () => {
+        const result = await D.transitionAdminOccurrenceReport(
+          form.dataset.id, status, formValue(form, "reason") || null,
+        );
+        message(result.report_status === "in_review" ? "Análise iniciada e registrada." : "Decisão da denúncia registrada.");
+        await adminOccurrenceReportDetails(form.dataset.id, generation);
+      });
+      return;
+    }
+    if (form.id === "admin-report-controls") {
+      event.preventDefault();
+      clearTimeout(adminReports.searchTimer);
+      adminReports.page = 1;
+      await loadAdminReports(generation);
+      return;
+    }
     if (form.id === "admin-occurrence-moderation-form") {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -964,6 +1127,20 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       clearTimeout(adminOccurrences.searchTimer);
       adminOccurrences.page = 1;
       await loadAdminOccurrences(generation);
+      return;
+    }
+    if (form.id === "real-occurrence-report-form") {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      await busy(form, async () => {
+        const result = await D.reportOccurrence(
+          form.dataset.id, formValue(form, "category"), formValue(form, "description"),
+        );
+        message(result.already_active
+          ? "Você já possui uma denúncia ativa para este alerta."
+          : "Denúncia registrada. Obrigado por ajudar na análise da comunidade.");
+        navigate(url("pet", form.dataset.id));
+      });
       return;
     }
     if (!form.id?.startsWith("real-")) return;
@@ -1101,6 +1278,16 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           adminDirectory.page = page;
           await loadAdminUsers(generation);
         }
+      } else if (action === "admin-report-page") {
+        const page = Number(target.dataset.page);
+        if (Number.isInteger(page) && page >= 1) {
+          adminReports.page = page;
+          await loadAdminReports(generation);
+        }
+      } else if (action === "admin-report-retry") {
+        await loadAdminReports(generation);
+      } else if (action === "admin-report-retry-detail") {
+        await adminOccurrenceReportDetails(routeInfo().detailId, generation);
       } else if (action === "admin-occurrence-page") {
         const page = Number(target.dataset.page);
         if (Number.isInteger(page) && page >= 1) {
@@ -1203,6 +1390,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "admin-report-query") {
+      adminReports.query = event.target.value;
+      adminReports.page = 1;
+      clearTimeout(adminReports.searchTimer);
+      adminReports.searchTimer = setTimeout(() => { void loadAdminReports(generation); }, 300);
+      return;
+    }
     if (event.target.id === "admin-occurrence-query") {
       adminOccurrences.query = event.target.value;
       adminOccurrences.page = 1;
@@ -1230,6 +1424,17 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
   }
   function onChange(event) {
+    if (["admin-report-status", "admin-report-category", "admin-report-from", "admin-report-to", "admin-report-order"].includes(event.target.id)) {
+      const key = {
+        "admin-report-status": "status", "admin-report-category": "category",
+        "admin-report-from": "createdFrom", "admin-report-to": "createdTo",
+        "admin-report-order": "order",
+      }[event.target.id];
+      adminReports[key] = event.target.value;
+      adminReports.page = 1;
+      void loadAdminReports(generation);
+      return;
+    }
     if (["admin-occurrence-type", "admin-occurrence-status", "admin-occurrence-visibility", "admin-occurrence-from", "admin-occurrence-to"].includes(event.target.id)) {
       const keys = {
         "admin-occurrence-type": "type", "admin-occurrence-status": "status",

@@ -173,6 +173,63 @@ test("moderação administrativa usa RPCs dedicados, valida filtros e exige just
   await assert.rejects(store.moderateAdminOccurrence(OCCURRENCE_ID, "hide", "curta"), { code: "VALIDATION" });
 });
 
+test("denúncias conectadas usam somente RPCs e validam os campos antes do envio", async () => {
+  const reportId = "88888888-8888-4888-8888-888888888888";
+  const { client, calls } = clientMock((call) => {
+    const data = {
+      report_occurrence: [{ report_id: reportId, report_status: "open", already_active: false }],
+      get_my_active_occurrence_report: [{ report_id: reportId, report_status: "open" }],
+      admin_occurrence_report_counts: [{ open_count: 2, in_review_count: 1, resolved_count: 3, dismissed_count: 1 }],
+      admin_list_occurrence_reports: [{ report_id: reportId, occurrence_id: OCCURRENCE_ID, total_count: 9 }],
+      admin_get_occurrence_report: [{ report_id: reportId, occurrence_id: OCCURRENCE_ID }],
+      admin_transition_occurrence_report: [{ report_id: reportId, report_status: "resolved", action: "resolved" }],
+      admin_list_occurrence_report_history: [{ action: "resolved", reason: "Análise concluída com evidências.", total_count: 2 }],
+    };
+    return { data: data[call.name] ?? null, error: null };
+  });
+  const store = createRemoteStore(client);
+  const submitted = await store.reportOccurrence(OCCURRENCE_ID, "other", "Descrição complementar suficientemente clara.");
+  const mine = await store.getMyActiveOccurrenceReport(OCCURRENCE_ID);
+  const counts = await store.getAdminOccurrenceReportCounts();
+  const page = await store.listAdminOccurrenceReports({
+    query: reportId, status: "open", category: "other", createdFrom: "2026-10-01",
+    createdTo: "2026-10-23", order: "oldest", page: 2, pageSize: 10,
+  });
+  const detail = await store.getAdminOccurrenceReport(reportId);
+  const transition = await store.transitionAdminOccurrenceReport(reportId, "resolved", "Análise concluída com evidências.");
+  const history = await store.listAdminOccurrenceReportHistory(reportId, { page: 1, pageSize: 10 });
+  assert.equal(submitted.report_id, reportId);
+  assert.equal(mine.report_status, "open");
+  assert.equal(counts.open_count, 2);
+  assert.equal(page.total, 9);
+  assert.equal(detail.occurrence_id, OCCURRENCE_ID);
+  assert.equal(transition.action, "resolved");
+  assert.equal(history.entries[0].action, "resolved");
+  assert.deepEqual(calls.find((call) => call.name === "report_occurrence")?.params, {
+    p_occurrence: OCCURRENCE_ID, p_category: "other",
+    p_description: "Descrição complementar suficientemente clara.",
+  });
+  assert.deepEqual(calls.find((call) => call.name === "admin_list_occurrence_reports")?.params, {
+    p_query: reportId, p_status: "open", p_category: "other",
+    p_created_from: "2026-10-01", p_created_to: "2026-10-23",
+    p_order: "oldest", p_page: 2, p_page_size: 10,
+  });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+  await assert.rejects(store.reportOccurrence(OCCURRENCE_ID, "invented", "Descrição complementar suficientemente clara."), { code: "VALIDATION" });
+  await assert.rejects(store.reportOccurrence(OCCURRENCE_ID, "other", "curto"), { code: "VALIDATION" });
+  await assert.rejects(store.transitionAdminOccurrenceReport(reportId, "dismissed", "curto"), { code: "VALIDATION" });
+  await assert.rejects(store.listAdminOccurrenceReports({ order: "random" }), { code: "VALIDATION" });
+});
+
+test("limite temporário e conflito concorrente de denúncia têm mensagens seguras", async () => {
+  for (const [code, expected] of [["P0001", "RATE_LIMIT"], ["PT409", "CONFLICT"]]) {
+    const { client } = clientMock(() => ({ data: null, error: { code } }));
+    await assert.rejects(createRemoteStore(client).reportOccurrence(
+      OCCURRENCE_ID, "other", "Descrição complementar suficientemente clara.",
+    ), { code: expected });
+  }
+});
+
 test("RPC administrativa ausente informa que a funcionalidade ainda não foi publicada", async () => {
   const { client } = clientMock((call) => call.name === "admin_list_users"
     ? { data: null, error: { code: "PGRST202" } }

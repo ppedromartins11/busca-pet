@@ -92,6 +92,12 @@ function safeError(error) {
     return new RemoteStoreError("DEPENDENCY", "Este registro possui vínculos que impedem a operação.", details);
   if (code === "23505")
     return new RemoteStoreError("CONFLICT", "Este registro já existe.", details);
+  if (code === "40001")
+    return new RemoteStoreError("CONFLICT", "Esta denúncia mudou durante a análise. Atualize a página e tente novamente.", details);
+  if (code === "PT409")
+    return new RemoteStoreError("CONFLICT", "Esta denúncia mudou durante a análise. Atualize a página e tente novamente.", details);
+  if (code === "P0001")
+    return new RemoteStoreError("RATE_LIMIT", "Você atingiu o limite temporário de denúncias. Tente novamente mais tarde.", details);
   if (code === "23514" || code === "22023" || code === "22P02" || code === "PGRST204")
     return new RemoteStoreError("VALIDATION", "Revise os dados informados.", details);
   if (code === "P0002")
@@ -337,6 +343,85 @@ export function createRemoteStore(client) {
       await currentUser();
       const rows = await checked(configured().rpc("admin_list_occurrence_audit", {
         p_occurrence: requiredUuid(id, "Ocorrência"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const entries = Array.isArray(rows) ? rows : [];
+      return { entries, total: Number(entries[0]?.total_count || 0) };
+    },
+    async reportOccurrence(occurrenceId, category, description) {
+      await currentUser();
+      const rows = await checked(configured().rpc("report_occurrence", {
+        p_occurrence: requiredUuid(occurrenceId, "Ocorrência"),
+        p_category: choice(category, [
+          "false_misleading", "suspected_fraud", "inappropriate_content",
+          "duplicate_occurrence", "misuse_of_information", "other",
+        ], "Motivo da denúncia"),
+        p_description: requiredText(description, "Descrição", 10, 1000),
+      }));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("UNAVAILABLE", "Não foi possível registrar a denúncia.");
+      return result;
+    },
+    async getMyActiveOccurrenceReport(occurrenceId) {
+      await currentUser();
+      const rows = await checked(configured().rpc("get_my_active_occurrence_report", {
+        p_occurrence: requiredUuid(occurrenceId, "Ocorrência"),
+      }));
+      return Array.isArray(rows) ? rows[0] || null : rows || null;
+    },
+    async getAdminOccurrenceReportCounts() {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_occurrence_report_counts"));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("UNAVAILABLE", "Não foi possível consultar os indicadores de denúncias.");
+      return result;
+    },
+    async listAdminOccurrenceReports(options = {}) {
+      await currentUser();
+      const query = optionalText(options.query, "Busca", 120) || null;
+      const rows = await checked(configured().rpc("admin_list_occurrence_reports", {
+        p_query: query,
+        p_status: adminDirectoryFilter(options.status, ["open", "in_review", "resolved", "dismissed"], "Situação"),
+        p_category: adminDirectoryFilter(options.category, [
+          "false_misleading", "suspected_fraud", "inappropriate_content",
+          "duplicate_occurrence", "misuse_of_information", "other",
+        ], "Motivo"),
+        p_created_from: dateOnly(options.createdFrom, "Data inicial"),
+        p_created_to: dateOnly(options.createdTo, "Data final"),
+        p_order: choice(options.order ?? "newest", ["newest", "oldest"], "Ordenação"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const reports = Array.isArray(rows) ? rows : [];
+      return { reports, total: Number(reports[0]?.total_count || 0) };
+    },
+    async getAdminOccurrenceReport(id) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_get_occurrence_report", {
+        p_report: requiredUuid(id, "Denúncia"),
+      }));
+      const report = Array.isArray(rows) ? rows[0] : rows;
+      if (!report) problem("NOT_FOUND", "Denúncia não encontrada ou sem permissão.");
+      return report;
+    },
+    async transitionAdminOccurrenceReport(id, status, reason = null) {
+      await currentUser();
+      const nextStatus = choice(status, ["in_review", "resolved", "dismissed"], "Situação");
+      const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+      const nextReason = nextStatus === "in_review" && !trimmedReason
+        ? null : requiredText(trimmedReason, "Justificativa", 10, 500);
+      const rows = await checked(configured().rpc("admin_transition_occurrence_report", {
+        p_report: requiredUuid(id, "Denúncia"), p_status: nextStatus, p_reason: nextReason,
+      }));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("NOT_FOUND", "Denúncia não encontrada ou sem permissão.");
+      return result;
+    },
+    async listAdminOccurrenceReportHistory(id, options = {}) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_list_occurrence_report_history", {
+        p_report: requiredUuid(id, "Denúncia"),
         p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
         p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
       }));

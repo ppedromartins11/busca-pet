@@ -10,7 +10,7 @@
     publishAlert: commonRoles, editAlert: commonRoles, resolveAlert: commonRoles,
     reopenAlert: commonRoles, manageParticipant: commonRoles, reviewSighting: commonRoles,
     createTask: commonRoles, updateTask: commonRoles, createSighting: commonRoles,
-    createReport: ["tutor", "colaborador", "parceiro"],
+    createReport: ["tutor", "colaborador", "parceiro", "moderador", "administrador"],
     moderate: ["moderador", "administrador"], manageAccount: ["administrador"],
     viewAdminDashboard: ["administrador"],
   });
