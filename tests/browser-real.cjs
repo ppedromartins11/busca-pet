@@ -144,6 +144,111 @@ const chrome = process.env.CHROME_PATH || [
     assert.equal(await page.locator('#real-mobile-nav a[href="#login"]').count(), 0);
     assert.equal(await page.locator('#real-mobile-nav a[href="#registro"]').count(), 0);
 
+    // Uma sessão comum sintetizada só verifica a guarda visual; a autorização
+    // definitiva e as contagens administrativas são exercitadas pelo pgTAP.
+    await page.evaluate(() => {
+      window.BPAuth.getSession = () => ({ userId: "synthetic-common" });
+      window.BPAuth.getCurrentUser = () => ({
+        id: "synthetic-common", status: "active", emailVerified: true, roles: ["tutor"],
+      });
+      window.BPAuth.hasRole = () => false;
+      location.hash = "#admin";
+    });
+    await page.getByRole("heading", { name: "Acesso negado" }).waitFor();
+    assert.equal(await page.getByText("Indicadores protegidos", { exact: true }).count(), 1);
+
+    // A listagem usa respostas sintéticas somente no navegador local: a RPC e
+    // sua autorização real são validadas em pgTAP, sem consultar dados remotos.
+    await page.evaluate(() => {
+      const accounts = [
+        { account_id: "a1000000-0000-4000-8000-000000000001", display_name: "Ana Administradora", email: "ana@example.test", roles: ["administrador", "tutor"], status: "active", active_role: "tutor", created_at: "2026-10-20T12:00:00.000Z", total_count: 2 },
+        { account_id: "b1000000-0000-4000-8000-000000000002", display_name: "Bruno Colaborador", email: "bruno@example.test", roles: ["colaborador", "tutor"], status: "suspended", active_role: "tutor", created_at: "2026-10-19T12:00:00.000Z", total_count: 2 },
+      ];
+      const audit = [];
+      window.__adminDirectoryCalls = [];
+      const client = window.BPSupabase.client;
+      client.auth.getUser = async () => ({ data: { user: { id: "a1000000-0000-4000-8000-000000000001" } }, error: null });
+      client.rpc = async (name, params = {}) => {
+        window.__adminDirectoryCalls.push({ name, params });
+        if (window.__adminDirectoryFailure) return { data: null, error: { code: "PGRST202" } };
+        if (name === "admin_list_users") {
+          let rows = accounts;
+          const query = String(params.p_query || "").toLowerCase();
+          if (query) rows = rows.filter((row) => `${row.display_name} ${row.email} ${row.account_id}`.toLowerCase().includes(query));
+          if (params.p_status) rows = rows.filter((row) => row.status === params.p_status);
+          if (params.p_role) rows = rows.filter((row) => row.roles.includes(params.p_role));
+          return { data: rows.map((row) => ({ ...row, total_count: rows.length })), error: null };
+        }
+        if (name === "admin_get_user") return { data: accounts.filter((row) => row.account_id === params.p_user), error: null };
+        if (name === "admin_list_account_status_audit") {
+          const rows = audit.filter((row) => row.target_id === params.p_user);
+          return { data: rows.map((row) => ({ ...row, total_count: rows.length })), error: null };
+        }
+        if (name === "admin_change_account_status") {
+          const account = accounts.find((row) => row.account_id === params.p_user);
+          if (!account) return { data: [], error: null };
+          account.status = params.p_status;
+          const action = params.p_status === "suspended" ? "account_suspended" : "account_reactivated";
+          audit.unshift({ target_id: account.account_id, actor_name: "Ana Administradora", action, reason: params.p_reason || null, created_at: "2026-10-23T12:00:00.000Z" });
+          return { data: [{ target_id: account.account_id, account_status: account.status, action }], error: null };
+        }
+        return { data: null, error: null };
+      };
+      window.BPAuth.getSession = () => ({ userId: "synthetic-admin" });
+      window.BPAuth.getCurrentUser = () => ({
+        id: "synthetic-admin", status: "active", emailVerified: true, roles: ["administrador", "tutor"],
+      });
+      window.BPAuth.hasRole = (role) => role === "administrador" || role === "tutor";
+      location.hash = "#admin/usuarios";
+    });
+    await page.getByRole("heading", { name: "Gestão de usuários" }).waitFor();
+    await page.getByText("Ana Administradora", { exact: true }).waitFor();
+    assert.equal(await page.locator('.admin-nav a[href="#admin"][aria-current="page"]').count(), 0);
+    assert.equal(await page.locator('.admin-nav a[href="#admin/usuarios"][aria-current="page"]').count(), 1);
+    assert.equal(await page.getByRole("button", { name: "Suspender" }).count(), 0);
+    const directorySearch = page.getByLabel("Buscar por nome, e-mail ou identificador");
+    await directorySearch.focus();
+    assert.equal(await directorySearch.evaluate((element) => document.activeElement === element), true);
+    await directorySearch.fill("Bruno");
+    await page.waitForFunction(() => window.__adminDirectoryCalls.some((call) => call.name === "admin_list_users" && call.params.p_query === "Bruno"));
+    await page.waitForFunction(() => !document.querySelector(".admin-user-table tbody")?.textContent.includes("Ana Administradora"));
+    await page.getByText("Bruno Colaborador", { exact: true }).waitFor();
+    assert.equal(await page.getByText("Ana Administradora", { exact: true }).count(), 0);
+    await page.getByLabel("Papel").selectOption("colaborador");
+    await page.waitForFunction(() => window.__adminDirectoryCalls.some((call) => call.name === "admin_list_users" && call.params.p_role === "colaborador"));
+    await page.getByRole("link", { name: "Ver detalhes" }).click();
+    await page.getByRole("heading", { name: "Bruno Colaborador" }).waitFor();
+    assert.equal(await page.getByText("bruno@example.test", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("Todos os papéis", { exact: true }).count(), 1);
+    await page.getByRole("button", { name: "Reativar conta" }).click();
+    await page.locator("#admin-status-dialog-title").waitFor();
+    await page.getByRole("button", { name: "Confirmar reativação" }).click();
+    await page.waitForFunction(() => window.__adminDirectoryCalls.some((call) => call.name === "admin_change_account_status" && call.params.p_status === "active"));
+    await page.getByRole("button", { name: "Suspender conta" }).waitFor();
+    await page.getByRole("button", { name: "Suspender conta" }).click();
+    const reason = page.getByLabel("Motivo da suspensão *");
+    await reason.fill("Uso indevido confirmado durante a revisão.");
+    await page.getByRole("button", { name: "Confirmar suspensão" }).click();
+    await page.waitForFunction(() => window.__adminDirectoryCalls.some((call) => call.name === "admin_change_account_status" && call.params.p_status === "suspended"));
+    await page.getByRole("button", { name: "Reativar conta" }).waitFor();
+    const auditItems = page.locator(".admin-audit-list li");
+    await auditItems.first().waitFor();
+    assert.equal(await auditItems.count(), 2);
+    assert.match(await page.locator(".admin-audit-list").textContent(), /Uso indevido confirmado durante a revisão\./);
+    await page.getByRole("link", { name: "Voltar para usuários" }).click();
+    await page.getByRole("heading", { name: "Gestão de usuários" }).waitFor();
+    await page.evaluate(() => { window.__adminDirectoryFailure = true; });
+    await page.getByLabel("Ordenação").selectOption("oldest");
+    await page.getByText("Funcionalidade ainda não publicada", { exact: true }).waitFor();
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1), true, `diretório administrativo excede a largura em ${width}px`);
+    }
+    await page.evaluate(() => {
+      window.BPAuth.getSession = () => null;
+      window.BPAuth.getCurrentUser = () => null;
+    });
+
     await page.goto(base + "/#meus-animais", { waitUntil: "domcontentloaded" });
     await page.waitForURL(/#login(?:$|\/|\?)/);
     assert.equal(await page.locator('input[name="email"]').count(), 1);

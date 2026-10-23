@@ -44,6 +44,18 @@ function choice(value, values, label) {
   return value;
 }
 
+function boundedInteger(value, label, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max)
+    problem("VALIDATION", `${label} inválido.`);
+  return number;
+}
+
+function adminDirectoryFilter(value, values, label) {
+  if (value == null || value === "" || value === "all") return null;
+  return choice(value, values, label);
+}
+
 function dateTime(value, label) {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) problem("VALIDATION", `${label} inválida.`);
@@ -70,8 +82,12 @@ function safeError(error) {
     return new RemoteStoreError("DEPENDENCY", "Este registro possui vínculos que impedem a operação.", details);
   if (code === "23505")
     return new RemoteStoreError("CONFLICT", "Este registro já existe.", details);
-  if (code === "23514" || code === "22P02" || code === "PGRST204")
+  if (code === "23514" || code === "22023" || code === "22P02" || code === "PGRST204")
     return new RemoteStoreError("VALIDATION", "Revise os dados informados.", details);
+  if (code === "P0002")
+    return new RemoteStoreError("NOT_FOUND", "O registro solicitado não foi encontrado.", details);
+  if (code === "PGRST202")
+    return new RemoteStoreError("NOT_PUBLISHED", "A gestão de usuários ainda não foi publicada neste ambiente.", details);
   return new RemoteStoreError("UNAVAILABLE", "Não foi possível concluir a operação. Tente novamente.", details);
 }
 
@@ -215,6 +231,61 @@ export function createRemoteStore(client) {
     async listMyRoles() {
       const { id } = await currentUser();
       return checked(configured().from("user_roles").select("role,granted_at").eq("user_id", id));
+    },
+    async getAdminDashboardMetrics() {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_dashboard_metrics"));
+      const metrics = Array.isArray(rows) ? rows[0] : rows;
+      if (!metrics) problem("NOT_FOUND", "Indicadores administrativos indisponíveis.");
+      return metrics;
+    },
+    async listAdminUsers(options = {}) {
+      await currentUser();
+      const query = optionalText(options.query, "Busca", 120) || "";
+      const rows = await checked(configured().rpc("admin_list_users", {
+        p_query: query || null,
+        p_status: adminDirectoryFilter(options.status, ["active", "suspended"], "Situação"),
+        p_role: adminDirectoryFilter(options.role, ["tutor", "colaborador", "parceiro", "moderador", "administrador"], "Papel"),
+        p_order: choice(options.order || "newest", ["newest", "oldest", "name"], "Ordenação"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const users = Array.isArray(rows) ? rows : [];
+      return { users, total: Number(users[0]?.total_count || 0) };
+    },
+    async getAdminUser(id) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_get_user", {
+        p_user: requiredUuid(id, "Conta"),
+      }));
+      const account = Array.isArray(rows) ? rows[0] : rows;
+      if (!account) problem("NOT_FOUND", "Conta não encontrada ou sem permissão.");
+      return account;
+    },
+    async changeAdminUserStatus(id, status, reason = null) {
+      await currentUser();
+      const nextStatus = choice(status, ["active", "suspended"], "Situação");
+      const nextReason = nextStatus === "suspended"
+        ? requiredText(reason, "Motivo da suspensão", 10, 500)
+        : optionalText(reason, "Motivo", 500);
+      const rows = await checked(configured().rpc("admin_change_account_status", {
+        p_user: requiredUuid(id, "Conta"),
+        p_status: nextStatus,
+        p_reason: nextReason,
+      }));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("NOT_FOUND", "A conta não foi atualizada.");
+      return result;
+    },
+    async listAdminAccountStatusAudit(id, options = {}) {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_list_account_status_audit", {
+        p_user: requiredUuid(id, "Conta"),
+        p_page: boundedInteger(options.page ?? 1, "Página", 1, 100000),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da página", 1, 50),
+      }));
+      const entries = Array.isArray(rows) ? rows : [];
+      return { entries, total: Number(entries[0]?.total_count || 0) };
     },
     async requestCollaboratorRole() {
       const { id } = await currentUser();

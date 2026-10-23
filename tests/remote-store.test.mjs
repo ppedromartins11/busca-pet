@@ -83,6 +83,66 @@ test("status and exact coordinates use authorized RPC wrappers", async () => {
     { p_sighting: PET_ID, p_lat: -15.6, p_lon: -56.1 });
 });
 
+test("dashboard administrativo usa somente o RPC agregado protegido", async () => {
+  const { client, calls } = clientMock((call) => call.name === "admin_dashboard_metrics"
+    ? { data: [{ total_accounts: 3, total_pets: 2 }], error: null }
+    : { data: null, error: null });
+  const metrics = await createRemoteStore(client).getAdminDashboardMetrics();
+  assert.deepEqual(metrics, { total_accounts: 3, total_pets: 2 });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+  assert.equal(calls.find((call) => call.kind === "rpc")?.name, "admin_dashboard_metrics");
+});
+
+test("diretório administrativo usa RPCs restritos, com filtros e detalhes validados", async () => {
+  const { client, calls } = clientMock((call) => call.name === "admin_list_users"
+    ? { data: [{ account_id: USER_ID, display_name: "Ana", total_count: 2 }], error: null }
+    : { data: [{ account_id: USER_ID, display_name: "Ana", roles: ["tutor"] }], error: null });
+  const store = createRemoteStore(client);
+  const page = await store.listAdminUsers({
+    query: "Ana", status: "active", role: "tutor", order: "name", page: 2, pageSize: 20,
+  });
+  const account = await store.getAdminUser(USER_ID);
+  assert.equal(page.total, 2);
+  assert.equal(account.account_id, USER_ID);
+  assert.deepEqual(calls.find((call) => call.name === "admin_list_users")?.params, {
+    p_query: "Ana", p_status: "active", p_role: "tutor", p_order: "name", p_page: 2, p_page_size: 20,
+  });
+  assert.deepEqual(calls.find((call) => call.name === "admin_get_user")?.params, { p_user: USER_ID });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+});
+
+test("suspensão administrativa usa RPCs protegidos, valida o motivo e lê histórico limitado", async () => {
+  const { client, calls } = clientMock((call) => {
+    if (call.name === "admin_change_account_status") return {
+      data: [{ target_id: USER_ID, account_status: "suspended", action: "account_suspended" }], error: null,
+    };
+    if (call.name === "admin_list_account_status_audit") return {
+      data: [{ actor_name: "Ana", action: "account_suspended", reason: "Uso indevido confirmado.", total_count: 1 }], error: null,
+    };
+    return { data: null, error: null };
+  });
+  const store = createRemoteStore(client);
+  const changed = await store.changeAdminUserStatus(USER_ID, "suspended", "Uso indevido confirmado.");
+  const history = await store.listAdminAccountStatusAudit(USER_ID, { page: 2, pageSize: 20 });
+  assert.equal(changed.action, "account_suspended");
+  assert.equal(history.total, 1);
+  assert.deepEqual(calls.find((call) => call.name === "admin_change_account_status")?.params, {
+    p_user: USER_ID, p_status: "suspended", p_reason: "Uso indevido confirmado.",
+  });
+  assert.deepEqual(calls.find((call) => call.name === "admin_list_account_status_audit")?.params, {
+    p_user: USER_ID, p_page: 2, p_page_size: 20,
+  });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+  await assert.rejects(store.changeAdminUserStatus(USER_ID, "suspended", "curto"), { code: "VALIDATION" });
+});
+
+test("RPC administrativa ausente informa que a funcionalidade ainda não foi publicada", async () => {
+  const { client } = clientMock((call) => call.name === "admin_list_users"
+    ? { data: null, error: { code: "PGRST202" } }
+    : { data: null, error: null });
+  await assert.rejects(createRemoteStore(client).listAdminUsers(), { code: "NOT_PUBLISHED" });
+});
+
 test("private Storage upload is cleaned when photo metadata is rejected", async () => {
   const { client, calls } = clientMock((call) => call.table === "occurrence_photos"
     ? { data: null, error: { code: "42501" } }

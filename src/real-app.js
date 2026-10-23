@@ -12,7 +12,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento"]);
+  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let photos = [];
@@ -29,6 +29,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   let mapPoints = [];
   let mapOccurrenceId = "";
   let mapQueryGeneration = 0;
+  const adminDirectory = { query: "", status: "", role: "", order: "newest", page: 1, pageSize: 20, request: 0, searchTimer: null };
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -88,10 +89,11 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } finally { URL.revokeObjectURL(source); }
   }
   function routeInfo() {
-    const [route = "home", raw = ""] = location.hash.replace(/^#/, "").split("/");
-    let id = "";
+    const [route = "home", raw = "", rawDetail = ""] = location.hash.replace(/^#/, "").split("/");
+    let id = "", detail = "";
     try { id = decodeURIComponent(raw); } catch { /* invalid route is handled below */ }
-    return { route: route || "home", id };
+    try { detail = decodeURIComponent(rawDetail); } catch { /* invalid route is handled below */ }
+    return { route: route || "home", id, detail };
   }
   function message(text) {
     const target = document.querySelector("#real-toast");
@@ -127,11 +129,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   function chrome(route) {
     const logged = Boolean(user());
+    const admin = window.BPPermissions?.can("viewAdminDashboard");
     const links = [
       ["home", "Início", "home"],
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
       ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(admin ? [["admin", "Administração", "user"]] : []),
     ];
     const nav = links.map(([path, label, glyph]) => `<a href="#${path}" ${path.split("/")[0] === route ? 'aria-current="page" class="active"' : ""}>${glyph ? icon(glyph) : ""}${label}</a>`).join("");
     const actions = logged
@@ -544,6 +548,121 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const active = occurrences.filter((row) => row.status === "active").length;
     setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrences.length}</b><span>Meus alertas</span></div><div><b>${active}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar.")}`), "Minha área");
   }
+  function metric(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toLocaleString("pt-BR") : "—";
+  }
+  function adminMetric(iconName, value, label, detail = "") {
+    return `<article class="admin-metric"><span class="admin-metric-icon">${icon(iconName)}</span><div><b>${metric(value)}</b><h3>${esc(label)}</h3>${detail ? `<p>${esc(detail)}</p>` : ""}</div></article>`;
+  }
+  const adminRoleLabels = Object.freeze({ tutor: "Tutor", colaborador: "Colaborador", parceiro: "Parceiro", moderador: "Moderador", administrador: "Administrador" });
+  function adminNavigation(active) {
+    return `<nav class="admin-nav" aria-label="Navegação administrativa"><a class="${active === "overview" ? "active" : ""}" href="#admin" ${active === "overview" ? 'aria-current="page"' : ""}>${icon("home")}Visão geral</a><a class="${active === "users" ? "active" : ""}" href="#admin/usuarios" ${active === "users" ? 'aria-current="page"' : ""}>${icon("user")}Usuários</a></nav>`;
+  }
+  function adminFrame(active, content) {
+    return `<main class="admin-area" aria-label="Painel administrativo"><header class="admin-header"><div><span class="admin-eyebrow">Área administrativa</span><h1>Painel administrativo</h1><p>Consultas administrativas com acesso verificado no banco.</p></div><div class="admin-header-actions"><a class="btn secondary" href="#painel-tutor">${icon("home")}Área comum</a><button class="btn plain" type="button" data-action="logout">Sair</button></div></header><div class="admin-layout">${adminNavigation(active)}${content}</div></main>`;
+  }
+  function adminRoles(roles) {
+    const list = Array.isArray(roles) ? roles : [];
+    return list.length ? `<ul class="admin-roles" aria-label="Papéis">${list.map((role) => `<li>${esc(adminRoleLabels[role] || role)}</li>`).join("")}</ul>` : '<span class="hint">Não informado</span>';
+  }
+  function adminStatus(status) {
+    const active = status === "active";
+    return `<span class="admin-status ${active ? "active" : "suspended"}"><span aria-hidden="true"></span>${active ? "Ativa" : "Suspensa"}</span>`;
+  }
+  function adminAuditAction(action) {
+    return action === "account_suspended" ? "Conta suspensa" : "Conta reativada";
+  }
+  function adminAccountStatusAction(account) {
+    if (account.account_id === user()?.id)
+      return '<section class="admin-account-action" aria-labelledby="admin-account-action-title"><h3 id="admin-account-action-title">Situação da conta</h3><p>Você não pode alterar a situação da sua própria conta.</p></section>';
+    const suspended = account.status === "suspended";
+    const action = suspended ? "active" : "suspended";
+    return `<section class="admin-account-action" aria-labelledby="admin-account-action-title"><h3 id="admin-account-action-title">${suspended ? "Reativar conta" : "Suspender conta"}</h3><p>${suspended ? "Restaura o acesso da conta às operações protegidas." : "Interrompe o acesso da conta às operações protegidas, sem remover seus dados."}</p><button class="btn ${suspended ? "primary" : "danger"}" type="button" data-action="admin-account-status" data-id="${esc(account.account_id)}" data-name="${esc(account.display_name || "Conta")}" data-status="${action}">${suspended ? "Reativar conta" : "Suspender conta"}</button></section>`;
+  }
+  function adminAccountAudit(history) {
+    const entries = history?.entries || [];
+    if (!entries.length)
+      return '<section class="admin-account-audit" aria-labelledby="admin-account-audit-title"><h3 id="admin-account-audit-title">Histórico administrativo</h3><p class="hint">Nenhuma suspensão ou reativação registrada para esta conta.</p></section>';
+    return `<section class="admin-account-audit" aria-labelledby="admin-account-audit-title"><h3 id="admin-account-audit-title">Histórico administrativo</h3><ol class="admin-audit-list">${entries.map((entry) => `<li><strong>${esc(adminAuditAction(entry.action))}</strong><span>${esc(fmtDate(entry.created_at, true))} · ${esc(entry.actor_name || "Administrador indisponível")}</span>${entry.reason ? `<p><span class="sr-only">Motivo: </span>${esc(entry.reason)}</p>` : ""}</li>`).join("")}</ol></section>`;
+  }
+  function adminDirectoryFailure(error, section = "list") {
+    const description = section === "detail" ? "os detalhes desta conta" : "a consulta de contas";
+    let title = "Não foi possível carregar";
+    let body = `Não foi possível carregar ${description}. Tente novamente.`;
+    if (error?.code === "NOT_PUBLISHED") {
+      title = "Funcionalidade ainda não publicada";
+      body = "A consulta de usuários está disponível no ambiente local, mas a migration necessária ainda não foi publicada neste ambiente. Nenhum dado foi simulado.";
+    } else if (error?.code === "DENIED" || error?.code === "AUTH_REQUIRED") {
+      title = "Acesso negado";
+      body = "Sua conta não está autorizada a consultar usuários administrativos.";
+    } else if (error?.code === "NOT_FOUND" && section === "detail") {
+      title = "Conta não encontrada";
+      body = "A conta solicitada não existe ou não está disponível para consulta.";
+    }
+    return `<div class="notice"><strong>${esc(title)}</strong><p>${esc(body)}</p></div>${section === "detail" ? '<p><a class="btn secondary" href="#admin/usuarios">Voltar para usuários</a></p>' : '<p><button class="btn secondary" type="button" data-action="admin-retry">Tentar novamente</button></p>'}`;
+  }
+  function adminUsersMarkup() {
+    const controls = `<form class="admin-user-controls" id="admin-user-controls" aria-label="Filtros de usuários"><label class="admin-user-search" for="admin-user-query">Buscar por nome, e-mail ou identificador<input class="control" id="admin-user-query" type="search" maxlength="120" autocomplete="off" value="${esc(adminDirectory.query)}" placeholder="Ex.: ana@exemplo.com"></label><label for="admin-user-status">Situação<select class="control" id="admin-user-status"><option value="" ${adminDirectory.status ? "" : "selected"}>Todas</option><option value="active" ${adminDirectory.status === "active" ? "selected" : ""}>Ativas</option><option value="suspended" ${adminDirectory.status === "suspended" ? "selected" : ""}>Suspensas</option></select></label><label for="admin-user-role">Papel<select class="control" id="admin-user-role"><option value="" ${adminDirectory.role ? "" : "selected"}>Todos os papéis</option>${Object.entries(adminRoleLabels).map(([role, label]) => `<option value="${role}" ${adminDirectory.role === role ? "selected" : ""}>${label}</option>`).join("")}</select></label><label for="admin-user-order">Ordenação<select class="control" id="admin-user-order"><option value="newest" ${adminDirectory.order === "newest" ? "selected" : ""}>Mais recentes</option><option value="oldest" ${adminDirectory.order === "oldest" ? "selected" : ""}>Mais antigos</option><option value="name" ${adminDirectory.order === "name" ? "selected" : ""}>Nome</option></select></label></form>`;
+    return adminFrame("users", `<section class="admin-content" aria-labelledby="admin-users-title"><div class="admin-content-heading"><h2 id="admin-users-title">Gestão de usuários</h2><p>Consulte as contas cadastradas, seus perfis e a situação de acesso ao BuscaPet.</p></div>${controls}<p id="admin-user-results-status" class="hint" role="status" aria-live="polite">Carregando usuários…</p><div id="admin-user-results" aria-live="polite" aria-busy="true"></div></section>`);
+  }
+  function adminUsersTable(result) {
+    const rows = result.users || [];
+    const filtered = Boolean(adminDirectory.query || adminDirectory.status || adminDirectory.role);
+    if (!rows.length) return `<div class="notice"><strong>${filtered ? "Nenhum resultado encontrado" : "Nenhuma conta cadastrada"}</strong><p>${filtered ? "Ajuste a busca ou os filtros para consultar outras contas." : "As contas autorizadas aparecerão aqui quando existirem."}</p></div>`;
+    const start = (adminDirectory.page - 1) * adminDirectory.pageSize + 1;
+    const end = start + rows.length - 1;
+    const pages = Math.max(1, Math.ceil(result.total / adminDirectory.pageSize));
+    return `<div class="admin-user-table-wrap" tabindex="0"><table class="admin-user-table"><caption class="sr-only">Contas cadastradas</caption><thead><tr><th scope="col">Conta</th><th scope="col">Papéis</th><th scope="col">Situação</th><th scope="col">Cadastro</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${rows.map((account) => `<tr><td data-label="Conta"><strong>${esc(account.display_name || "Não informado")}</strong><span>${esc(account.email || "Não informado")}</span></td><td data-label="Papéis">${adminRoles(account.roles)}</td><td data-label="Situação">${adminStatus(account.status)}</td><td data-label="Cadastro">${esc(fmtDate(account.created_at, true))}</td><td data-label="Ações"><a class="btn secondary small" href="#admin/usuarios/${encodeURIComponent(account.account_id)}">Ver detalhes</a></td></tr>`).join("")}</tbody></table></div><nav class="admin-pagination" aria-label="Paginação de usuários"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-page" data-page="${adminDirectory.page - 1}" ${adminDirectory.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminDirectory.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-page" data-page="${adminDirectory.page + 1}" ${adminDirectory.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+  }
+  async function loadAdminUsers(ticket = generation) {
+    const request = ++adminDirectory.request;
+    const resultTarget = document.querySelector("#admin-user-results");
+    const statusTarget = document.querySelector("#admin-user-results-status");
+    if (resultTarget) resultTarget.setAttribute("aria-busy", "true");
+    if (statusTarget) statusTarget.textContent = "Carregando usuários…";
+    try {
+      const result = await D.listAdminUsers(adminDirectory);
+      if (ticket !== generation || request !== adminDirectory.request || routeInfo().id !== "usuarios") return;
+      if (resultTarget) { resultTarget.innerHTML = adminUsersTable(result); resultTarget.removeAttribute("aria-busy"); }
+      if (statusTarget) statusTarget.textContent = `${metric(result.total)} ${result.total === 1 ? "conta encontrada" : "contas encontradas"}.`;
+    } catch (error) {
+      if (ticket !== generation || request !== adminDirectory.request || routeInfo().id !== "usuarios") return;
+      if (resultTarget) { resultTarget.innerHTML = adminDirectoryFailure(error); resultTarget.removeAttribute("aria-busy"); }
+      if (statusTarget) statusTarget.textContent = "Consulta indisponível.";
+    }
+  }
+  async function adminUsers(ticket) {
+    if (!window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
+    setPage(adminUsersMarkup(), "Gestão de usuários");
+    await loadAdminUsers(ticket);
+  }
+  async function adminUserDetails(id, ticket) {
+    if (!window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
+    if (!UUID.test(id)) {
+      setPage(adminFrame("users", `<section class="admin-content" aria-labelledby="admin-user-detail-title"><div class="admin-content-heading"><h2 id="admin-user-detail-title">Gestão de usuários</h2></div>${adminDirectoryFailure({ code: "NOT_FOUND" }, "detail")}</section>`), "Conta não encontrada");
+      return;
+    }
+    try {
+      const [account, history] = await Promise.all([
+        D.getAdminUser(id),
+        D.listAdminAccountStatusAudit(id, { page: 1, pageSize: 20 }),
+      ]);
+      if (ticket !== generation) return;
+      setPage(adminFrame("users", `<section class="admin-content" aria-labelledby="admin-user-detail-title"><p><a class="back-link" href="#admin/usuarios">‹ Voltar para usuários</a></p><div class="admin-content-heading"><h2 id="admin-user-detail-title">${esc(account.display_name || "Conta")}</h2><p>Consulte dados administrativos essenciais e gerencie somente a situação de acesso da conta.</p></div><dl class="admin-user-details"><div><dt>Nome de exibição</dt><dd>${esc(account.display_name || "Não informado")}</dd></div><div><dt>E-mail</dt><dd>${esc(account.email || "Não informado")}</dd></div><div><dt>Identificador da conta</dt><dd><code>${esc(account.account_id)}</code></dd></div><div><dt>Data de criação</dt><dd>${esc(fmtDate(account.created_at, true))}</dd></div><div><dt>Situação</dt><dd>${adminStatus(account.status)}</dd></div><div><dt>Papel ativo</dt><dd>${esc(adminRoleLabels[account.active_role] || account.active_role || "Não informado")}</dd></div><div class="full"><dt>Todos os papéis</dt><dd>${adminRoles(account.roles)}</dd></div></dl>${adminAccountStatusAction(account)}${adminAccountAudit(history)}</section>`), "Detalhes da conta");
+    } catch (error) {
+      if (ticket === generation) setPage(adminFrame("users", `<section class="admin-content" aria-labelledby="admin-user-detail-title"><div class="admin-content-heading"><h2 id="admin-user-detail-title">Gestão de usuários</h2></div>${adminDirectoryFailure(error, "detail")}</section>`), "Gestão de usuários");
+    }
+  }
+  function adminDenied() {
+    setPage(shell("Acesso negado", "Esta área exige uma conta administrativa ativa.", `<div class="notice"><strong>Indicadores protegidos</strong><p>Não foi possível autorizar o acesso ao painel administrativo.</p></div><div class="actions"><a class="btn primary" href="#painel-tutor">Voltar à minha área</a></div>`, true), "Acesso negado");
+  }
+  async function adminDashboard(ticket) {
+    if (!window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
+    const stats = await D.getAdminDashboardMetrics();
+    if (ticket !== generation) return;
+    setPage(adminFrame("overview", `<section class="admin-content" aria-labelledby="admin-overview-title"><div class="admin-content-heading"><h2 id="admin-overview-title">Indicadores</h2><p>As contagens são atualizadas a cada acesso ao painel.</p></div><section class="admin-group" aria-labelledby="admin-users-title"><h2 id="admin-users-title">Usuários</h2><div class="admin-metrics">${adminMetric("user", stats.total_accounts, "Contas cadastradas")}${adminMetric("user", stats.active_accounts, "Contas ativas")}${adminMetric("user", stats.suspended_accounts, "Contas suspensas")}</div></section><section class="admin-group" aria-labelledby="admin-pets-title"><h2 id="admin-pets-title">Animais</h2><div class="admin-metrics">${adminMetric("paw", stats.total_pets, "Animais cadastrados")}</div></section><section class="admin-group" aria-labelledby="admin-occurrences-title"><h2 id="admin-occurrences-title">Ocorrências</h2><div class="admin-metrics">${adminMetric("search", stats.total_occurrences, "Total de ocorrências")}${adminMetric("search", stats.active_occurrences, "Buscas ativas")}${adminMetric("pin", stats.lost_occurrences, "Animais desaparecidos")}${adminMetric("paw", stats.found_occurrences, "Animais encontrados")}${adminMetric("heart", stats.resolved_occurrences, "Ocorrências resolvidas", "Inclui localizadas, reunidas e encerradas")}${adminMetric("heart", stats.reunited_occurrences, "Animais reunificados")}</div></section><section class="admin-group" aria-labelledby="admin-sightings-title"><h2 id="admin-sightings-title">Avistamentos</h2><div class="admin-metrics">${adminMetric("pin", stats.total_sightings, "Avistamentos")}${adminMetric("search", stats.pending_sightings, "Pendentes de análise")}</div></section></section>`), "Painel administrativo");
+  }
   async function sightingForm(id, ticket) {
     const row = await D.getOccurrence(id);
     if (ticket !== generation) return;
@@ -595,7 +714,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const ticket = ++generation;
     releasePhotos();
     destroyMap();
-    let { route, id } = routeInfo();
+    let { route, id, detail } = routeInfo();
     setPage(shell("Carregando", "Consultando dados autorizados…", "", true), "Carregando");
     try {
       await A.ready;
@@ -610,6 +729,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         return;
       }
       chrome(route === "map" ? "mapa" : route);
+      if (route === "admin" && !window.BPPermissions?.can("viewAdminDashboard")) {
+        adminDenied();
+        return;
+      }
       if (route === "home") await home(ticket);
       else if (route === "mapa" || route === "map") {
         if (id) mapMode = "real";
@@ -629,6 +752,12 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       else if (route === "publicar") await occurrenceForm("", id, ticket);
       else if (route === "editar") await occurrenceForm(id, "", ticket);
       else if (route === "painel-tutor") await dashboard(ticket);
+      else if (route === "admin" && id === "usuarios") {
+        if (detail) await adminUserDetails(detail, ticket);
+        else await adminUsers(ticket);
+      }
+      else if (route === "admin" && !id) await adminDashboard(ticket);
+      else if (route === "admin") unavailable("Página administrativa indisponível");
       else if (route === "avistamento") await sightingForm(id, ticket);
       else if (route === "minha-conta") account();
       else staticPage(route);
@@ -650,10 +779,35 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   function returnAfterLogin() {
     const next = sessionStorage.getItem("bp.real.returnTo");
     sessionStorage.removeItem("bp.real.returnTo");
-    return next && /^#[a-z-]+(?:\/[a-z0-9-]+)?$/i.test(next) ? next : "#painel-tutor";
+    return next && /^#[a-z-]+(?:\/[a-z0-9-]+){0,2}$/i.test(next) ? next : "#painel-tutor";
   }
   async function onSubmit(event) {
     const form = event.target;
+    if (form.id === "admin-account-status-form") {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      await busy(form, async () => {
+        const result = await D.changeAdminUserStatus(
+          form.dataset.id,
+          form.dataset.status,
+          formValue(form, "reason") || null,
+        );
+        adminDirectory.request += 1;
+        document.querySelector("#real-dialog")?.close();
+        message(result.account_status === "suspended"
+          ? "Conta suspensa. O acesso às operações protegidas foi bloqueado."
+          : "Conta reativada. O acesso às operações protegidas foi restaurado.");
+        await adminUserDetails(form.dataset.id, generation);
+      });
+      return;
+    }
+    if (form.id === "admin-user-controls") {
+      event.preventDefault();
+      clearTimeout(adminDirectory.searchTimer);
+      adminDirectory.page = 1;
+      await loadAdminUsers(generation);
+      return;
+    }
     if (!form.id?.startsWith("real-")) return;
     event.preventDefault();
     if (!form.reportValidity()) return;
@@ -760,6 +914,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     dialog.showModal();
     dialog.querySelector("button")?.focus();
   }
+  function adminAccountStatusDialog(id, name, status) {
+    const suspending = status === "suspended";
+    const dialog = document.querySelector("#real-dialog");
+    lastDialogFocus = document.activeElement;
+    dialog.innerHTML = `<form class="form admin-status-dialog" id="admin-account-status-form" data-id="${esc(id)}" data-status="${esc(status)}" aria-labelledby="admin-status-dialog-title"><h2 id="admin-status-dialog-title">${suspending ? "Suspender conta" : "Reativar conta"}</h2><p>${suspending ? `Confirme a suspensão de ${esc(name)}. Os dados serão preservados, mas as operações protegidas serão bloqueadas.` : `Confirme a reativação de ${esc(name)}. A conta voltará a acessar as operações protegidas.`}</p>${suspending ? '<label for="admin-status-reason">Motivo da suspensão *<textarea class="control" id="admin-status-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-status-reason-help"></textarea><span class="hint" id="admin-status-reason-help">Entre 10 e 500 caracteres. Este motivo ficará registrado no histórico administrativo.</span></label>' : ""}<p class="form-error" role="alert"></p><div class="actions"><button class="btn secondary" type="button" data-action="close-dialog">Cancelar</button><button class="btn ${suspending ? "danger" : "primary"}" type="submit">${suspending ? "Confirmar suspensão" : "Confirmar reativação"}</button></div></form>`;
+    dialog.showModal();
+    dialog.querySelector(suspending ? "textarea" : "button[type=submit]")?.focus();
+  }
   async function onClick(event) {
     if (event.target.closest("#real-mobile-nav a")) closeMobileMenu();
     if (event.target.closest(".menu-toggle")) {
@@ -775,7 +937,17 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     if (!target) return;
     const action = target.dataset.action;
     try {
-      if (action === "map-mode") {
+      if (action === "admin-page") {
+        const page = Number(target.dataset.page);
+        if (Number.isInteger(page) && page >= 1) {
+          adminDirectory.page = page;
+          await loadAdminUsers(generation);
+        }
+      } else if (action === "admin-retry") {
+        await loadAdminUsers(generation);
+      } else if (action === "admin-account-status") {
+        adminAccountStatusDialog(target.dataset.id, target.dataset.name || "Conta", target.dataset.status);
+      } else if (action === "map-mode") {
         mapMode = target.dataset.mode === "demo" ? "demo" : "real";
         if (mapMode === "demo" && mapOccurrenceId) navigate("#mapa");
         else realMapPage(mapOccurrenceId);
@@ -863,6 +1035,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "admin-user-query") {
+      adminDirectory.query = event.target.value;
+      adminDirectory.page = 1;
+      clearTimeout(adminDirectory.searchTimer);
+      adminDirectory.searchTimer = setTimeout(() => { void loadAdminUsers(generation); }, 300);
+      return;
+    }
     if (event.target.id === "real-query") {
       filters.query = event.target.value;
       const cards = [...document.querySelectorAll("#real-results .pet")];
@@ -876,6 +1055,15 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
   }
   function onChange(event) {
+    if (["admin-user-status", "admin-user-role", "admin-user-order"].includes(event.target.id)) {
+      const key = event.target.id === "admin-user-status" ? "status"
+        : event.target.id === "admin-user-role" ? "role" : "order";
+      adminDirectory[key] = event.target.value;
+      adminDirectory.page = 1;
+      clearTimeout(adminDirectory.searchTimer);
+      void loadAdminUsers(generation);
+      return;
+    }
     if (event.target.dataset.mapFilter) {
       mapFilters[event.target.dataset.mapFilter] = event.target.checked;
       if (mapController) mapController.setPoints(mapPoints, mapFilters, { fit: false });

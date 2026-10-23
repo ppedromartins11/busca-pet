@@ -338,9 +338,11 @@
       canResetPassword: () => recoveryGranted,
       removeRole: async () => { throw authError("ROLE_NOT_ALLOWED", "A remoção de função ainda não está disponível."); },
       verifyEmail: () => { throw authError("EMAIL_VERIFICATION_REQUIRED", "Confirme seu e-mail pelo link recebido."); },
-      setAccountStatus: async (id, status) => {
+      setAccountStatus: async (id, status, reason = null) => {
         requireSession();
-        unwrap(await supabase.rpc("set_account_status", { p_user: id, p_status: status }), "Não foi possível alterar o status da conta.");
+        unwrap(await supabase.rpc("admin_change_account_status", {
+          p_user: id, p_status: status, p_reason: reason,
+        }), "Não foi possível alterar o status da conta.");
       },
       validateSignUp: V.signUpData, normalizeEmail: normalizedEmail,
       issue: () => authIssue,

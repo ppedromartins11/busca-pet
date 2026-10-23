@@ -30,13 +30,18 @@
 
   function parse(hash) {
     const parts = String(hash || "#home").replace(/^#/, "").split("/");
-    let key = "";
+    let key = "", detail = "";
     try {
       key = decodeURIComponent(parts[1] || "");
     } catch {
       key = "";
     }
-    return { route: parts[0] || "home", key };
+    try {
+      detail = decodeURIComponent(parts[2] || "");
+    } catch {
+      detail = "";
+    }
+    return { route: parts[0] || "home", key, detail };
   }
 
   function access(route) {
@@ -50,6 +55,8 @@
         meta,
       };
     const user = auth.getCurrentUser();
+    if (!user || user.status !== "active")
+      return { status: "limited", meta, availableRoles: [] };
     if (user && !user.emailVerified)
       return { status: "verify-email", meta };
     if (meta.common && !["tutor", "colaborador"].some((role) => auth.hasRole(role)))

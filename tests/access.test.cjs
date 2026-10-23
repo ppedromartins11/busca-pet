@@ -74,7 +74,7 @@ test("guard preserva informação de sessão expirada", () => {
 test("guard mantém verificação de e-mail, mas não bloqueia conta comum pela função ativa", () => {
   const { router, state } = boot();
   state.session = { userId: "pessoa" };
-  state.user = { id: "pessoa", emailVerified: false, roles: ["tutor", "colaborador"] };
+  state.user = { id: "pessoa", emailVerified: false, status: "active", roles: ["tutor", "colaborador"] };
   state.activeRole = "tutor";
   assert.equal(router.access("operacao").status, "verify-email");
   state.user.emailVerified = true;
@@ -85,7 +85,7 @@ test("guard mantém verificação de e-mail, mas não bloqueia conta comum pela 
 test("conta comum acessa publicação sem alternar função ativa", () => {
   const { router, state } = boot();
   state.session = { userId: "pessoa" };
-  state.user = { id: "pessoa", emailVerified: true, roles: ["tutor", "colaborador"] };
+  state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor", "colaborador"] };
   state.activeRole = "colaborador";
   assert.equal(router.access("operacao").status, "allowed");
   assert.equal(router.access("publicar").status, "allowed");
@@ -94,7 +94,7 @@ test("conta comum acessa publicação sem alternar função ativa", () => {
 test("permissão comum ignora função ativa, mas preserva relação com o recurso", () => {
   const { permissions, state } = boot();
   state.session = { userId: "pessoa" };
-  state.user = { id: "pessoa", emailVerified: true, roles: ["tutor", "colaborador"] };
+  state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor", "colaborador"] };
   state.activeRole = "tutor";
   assert.equal(
     permissions.can("editAlert", { userId: "pessoa", ownerId: "pessoa" }),
@@ -117,6 +117,29 @@ test("administração exige papel concedido, não apenas active_role", () => {
   state.user.roles.push("administrador");
   state.activeRole = "tutor";
   assert.equal(permissions.can("manageAccount", { userId: "pessoa" }), true);
+});
+
+test("rota administrativa exige conta ativa e papel administrador concedido", () => {
+  const { router, permissions, state } = boot();
+  state.session = { userId: "pessoa" };
+  state.user = { id: "pessoa", emailVerified: true, status: "active", roles: ["tutor"] };
+  state.activeRole = "administrador";
+  assert.equal(router.access("admin").status, "limited");
+  assert.equal(permissions.can("viewAdminDashboard"), false);
+  state.user.roles.push("administrador");
+  assert.equal(router.access("admin").status, "allowed");
+  assert.equal(permissions.can("viewAdminDashboard"), true);
+  state.user.status = "suspended";
+  assert.equal(router.access("admin").status, "limited");
+  assert.equal(permissions.can("viewAdminDashboard"), false);
+});
+
+test("rota administrativa preserva seção e identificador de detalhe", () => {
+  const { router } = boot();
+  const route = router.parse("#admin/usuarios/11111111-1111-4111-8111-111111111111");
+  assert.equal(route.route, "admin");
+  assert.equal(route.key, "usuarios");
+  assert.equal(route.detail, "11111111-1111-4111-8111-111111111111");
 });
 
 test("retorno de login é consumido uma única vez", () => {

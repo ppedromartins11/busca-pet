@@ -12,6 +12,7 @@
     createTask: commonRoles, updateTask: commonRoles, createSighting: commonRoles,
     createReport: ["tutor", "colaborador", "parceiro"],
     moderate: ["moderador", "administrador"], manageAccount: ["administrador"],
+    viewAdminDashboard: ["administrador"],
   });
 
   function can(action, resource = {}) {
