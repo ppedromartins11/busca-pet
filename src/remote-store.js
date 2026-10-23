@@ -428,6 +428,50 @@ export function createRemoteStore(client) {
       const entries = Array.isArray(rows) ? rows : [];
       return { entries, total: Number(entries[0]?.total_count || 0) };
     },
+    async getAdminModerationMetrics() {
+      await currentUser();
+      const rows = await checked(configured().rpc("admin_moderation_metrics"));
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      if (!result) problem("UNAVAILABLE", "NÃ£o foi possÃ­vel consultar os indicadores de moderaÃ§Ã£o.");
+      return result;
+    },
+    async listAdminModerationQueue(options = {}) {
+      const filters = {
+        p_kind: choice(options.kind ?? "all", ["all", "report", "occurrence"], "Tipo"),
+        p_status: choice(options.status ?? "pending", ["pending", "all", "open", "in_review", "under_review", "resolved", "dismissed"], "SituaÃ§Ã£o"),
+        p_query: optionalText(options.query, "Busca", 120) || null,
+        p_order: choice(options.order ?? "priority", ["priority", "newest", "oldest"], "OrdenaÃ§Ã£o"),
+        p_created_from: dateOnly(options.createdFrom, "Data inicial"),
+        p_created_to: dateOnly(options.createdTo, "Data final"),
+        p_page_size: boundedInteger(options.pageSize ?? 20, "Tamanho da pÃ¡gina", 1, 50),
+      };
+      const requestedPage = boundedInteger(options.page ?? 1, "PÃ¡gina", 1, 100000);
+      await currentUser();
+      const readPage = async (page) => {
+        const rows = await checked(configured().rpc("admin_moderation_queue", {
+          ...filters, p_page: page,
+        }));
+        const items = Array.isArray(rows) ? rows : [];
+        return { items, total: Number(items[0]?.total_count || 0), page };
+      };
+
+      const current = await readPage(requestedPage);
+      if (current.items.length || requestedPage === 1) return current;
+
+      // count(*) over() has no row to carry the count when OFFSET is beyond
+      // the last row. Re-read page 1 with the same immutable filters, then
+      // clamp once to the latest last page. This recovery is bounded to two
+      // extra RPC calls; a concurrently emptied target falls back to the
+      // already-confirmed first page rather than reporting a false empty queue.
+      const first = await readPage(1);
+      if (!first.items.length) return first;
+      const lastPage = Math.max(1, Math.ceil(first.total / filters.p_page_size));
+      const recoveredPage = Math.min(requestedPage, lastPage);
+      if (recoveredPage === 1) return first;
+
+      const recovered = await readPage(recoveredPage);
+      return recovered.items.length ? recovered : first;
+    },
     async requestCollaboratorRole() {
       const { id } = await currentUser();
       await checked(configured().from("user_roles").insert({ user_id: id, role: "colaborador" }));

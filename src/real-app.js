@@ -41,6 +41,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   });
   const reportStatuses = Object.freeze({ open: "Aberta", in_review: "Em análise", resolved: "Resolvida", dismissed: "Descartada" });
   const adminReports = { query: "", status: "", category: "", createdFrom: "", createdTo: "", order: "newest", page: 1, pageSize: 20, request: 0, searchTimer: null };
+  const adminModeration = { query: "", kind: "all", status: "pending", order: "priority", createdFrom: "", createdTo: "", page: 1, pageSize: 20, request: 0, searchTimer: null };
 
   const url = (route, id) => `#${route}${id ? `/${encodeURIComponent(id)}` : ""}`;
   const user = () => A.getCurrentUser();
@@ -100,11 +101,12 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } finally { URL.revokeObjectURL(source); }
   }
   function routeInfo() {
-    const [route = "home", raw = "", rawDetail = ""] = location.hash.replace(/^#/, "").split("/");
+    const [hashPath = "", rawQuery = ""] = location.hash.replace(/^#/, "").split("?");
+    const [route = "home", raw = "", rawDetail = ""] = hashPath.split("/");
     let id = "", detailId = "";
     try { id = decodeURIComponent(raw); } catch { /* invalid route is handled below */ }
     try { detailId = decodeURIComponent(rawDetail); } catch { /* invalid route is handled below */ }
-    return { route: route || "home", id, detailId };
+    return { route: route || "home", id, detailId, source: new URLSearchParams(rawQuery).get("from") || "" };
   }
   function message(text) {
     const target = document.querySelector("#real-toast");
@@ -604,6 +606,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         ["users", "#admin/usuarios", "Usuários", "user"],
       ] : []),
       ...(window.BPPermissions?.can("moderate") ? [
+        ["moderation", "#admin/moderacao", "Central de moderação", "shield"],
         ["occurrences", "#admin/ocorrencias", "Ocorrências", "search"],
         ["reports", "#admin/denuncias", "Denúncias", "shield"],
       ] : []),
@@ -788,8 +791,9 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   async function adminOccurrenceDetails(id, ticket) {
     if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    const backHref = routeInfo().source === "moderacao" ? "#admin/moderacao" : "#admin/ocorrencias";
     if (!UUID.test(id)) {
-      setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure({ code: "NOT_FOUND" }, "detail")}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Ocorrência não encontrada");
+      setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure({ code: "NOT_FOUND" }, "detail")}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Ocorrência não encontrada");
       return;
     }
     try {
@@ -803,7 +807,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       const actionNote = nextAction === "hide"
         ? "A publicação e suas fotos deixarão de aparecer no feed. O status de busca ou reencontro não será alterado."
         : "A publicação voltará a aparecer no feed. O status de busca ou reencontro não será alterado.";
-      setPage(adminFrame("occurrences", `<section class="admin-content admin-occurrence-detail"><p><a class="back-link" href="#admin/ocorrencias">‹ Voltar à fila</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.visibility] || esc(row.visibility)}</span></div><h2 id="admin-occurrence-title">${esc(row.pet_name || "Animal sem vínculo")} · ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</h2><p>Protocolo <code>${esc(row.occurrence_id)}</code> · Criada ${esc(fmtDate(row.created_at, true))}</p></div><dl class="admin-user-details"><div><dt>Animal</dt><dd>${esc(row.pet_name || "Sem vínculo")} · ${esc(species[row.pet_species] || "Espécie não informada")}</dd></div><div><dt>Data do último registro</dt><dd>${esc(fmtDate(row.last_seen_at, true))}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</dd></div><div><dt>Visibilidade / situação</dt><dd>${moderationVisibility[row.visibility] || esc(row.visibility)} · ${moderationStatus[row.occurrence_status] || esc(row.occurrence_status)}</dd></div><div class="full"><dt>Descrição</dt><dd>${esc(row.description)}</dd></div>${row.pet_breed || row.pet_coat_description || row.pet_distinctive_features ? `<div class="full"><dt>Características informadas do animal</dt><dd>${[row.pet_breed, row.pet_coat_description, row.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><section class="admin-account-audit" aria-labelledby="admin-occurrence-photos-title"><h3 id="admin-occurrence-photos-title">Fotografias vinculadas</h3><div class="admin-occurrence-photos">${photosMarkup || '<p class="hint">Nenhuma foto vinculada a esta ocorrência.</p>'}</div></section><section class="admin-account-action" aria-labelledby="admin-occurrence-decision-title"><h3 id="admin-occurrence-decision-title">Registrar decisão</h3><p>${actionNote}</p><form id="admin-occurrence-moderation-form" data-id="${esc(row.occurrence_id)}" data-action-name="${nextAction}"><label for="admin-occurrence-reason">Justificativa obrigatória<textarea class="control" id="admin-occurrence-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-occurrence-reason-help"></textarea></label><span class="hint" id="admin-occurrence-reason-help">Informe de 10 a 500 caracteres. A decisão será registrada no histórico.</span><p class="form-error" role="alert"></p><button class="btn ${nextAction === "hide" ? "danger" : "primary"}" type="submit">${actionLabel}</button></form></section>${adminOccurrenceAuditMarkup(history)}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Análise de ocorrência");
+      setPage(adminFrame("occurrences", `<section class="admin-content admin-occurrence-detail"><p><a class="back-link" href="${backHref}">‹ Voltar à fila</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.visibility] || esc(row.visibility)}</span></div><h2 id="admin-occurrence-title">${esc(row.pet_name || "Animal sem vínculo")} · ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</h2><p>Protocolo <code>${esc(row.occurrence_id)}</code> · Criada ${esc(fmtDate(row.created_at, true))}</p></div><dl class="admin-user-details"><div><dt>Animal</dt><dd>${esc(row.pet_name || "Sem vínculo")} · ${esc(species[row.pet_species] || "Espécie não informada")}</dd></div><div><dt>Data do último registro</dt><dd>${esc(fmtDate(row.last_seen_at, true))}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</dd></div><div><dt>Visibilidade / situação</dt><dd>${moderationVisibility[row.visibility] || esc(row.visibility)} · ${moderationStatus[row.occurrence_status] || esc(row.occurrence_status)}</dd></div><div class="full"><dt>Descrição</dt><dd>${esc(row.description)}</dd></div>${row.pet_breed || row.pet_coat_description || row.pet_distinctive_features ? `<div class="full"><dt>Características informadas do animal</dt><dd>${[row.pet_breed, row.pet_coat_description, row.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><section class="admin-account-audit" aria-labelledby="admin-occurrence-photos-title"><h3 id="admin-occurrence-photos-title">Fotografias vinculadas</h3><div class="admin-occurrence-photos">${photosMarkup || '<p class="hint">Nenhuma foto vinculada a esta ocorrência.</p>'}</div></section><section class="admin-account-action" aria-labelledby="admin-occurrence-decision-title"><h3 id="admin-occurrence-decision-title">Registrar decisão</h3><p>${actionNote}</p><form id="admin-occurrence-moderation-form" data-id="${esc(row.occurrence_id)}" data-action-name="${nextAction}"><label for="admin-occurrence-reason">Justificativa obrigatória<textarea class="control" id="admin-occurrence-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-occurrence-reason-help"></textarea></label><span class="hint" id="admin-occurrence-reason-help">Informe de 10 a 500 caracteres. A decisão será registrada no histórico.</span><p class="form-error" role="alert"></p><button class="btn ${nextAction === "hide" ? "danger" : "primary"}" type="submit">${actionLabel}</button></form></section>${adminOccurrenceAuditMarkup(history)}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise de ocorrência");
       await Promise.all((row.photos || []).map(async (photo) => {
         const target = document.querySelector(`[data-admin-review-photo="${CSS.escape(photo.id)}"]`);
         if (!target) return;
@@ -821,7 +825,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         } catch { const placeholder = target.querySelector(".photo-placeholder"); if (placeholder) placeholder.textContent = "Foto indisponível"; }
       }));
     } catch (error) {
-      if (ticket === generation) setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure(error, "detail")}<p><a class="btn secondary" href="#admin/ocorrencias">Voltar à fila</a></p></section>`), "Análise de ocorrência");
+      if (ticket === generation) setPage(adminFrame("occurrences", `<section class="admin-content">${adminOccurrenceFailure(error, "detail")}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise de ocorrência");
     }
   }
   function adminReportFailure(error, detail = false) {
@@ -898,8 +902,9 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   }
   async function adminOccurrenceReportDetails(id, ticket) {
     if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    const backHref = routeInfo().source === "moderacao" ? "#admin/moderacao" : "#admin/denuncias";
     if (!UUID.test(id)) {
-      setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure({ code: "NOT_FOUND" }, true)}<p><a class="btn secondary" href="#admin/denuncias">Voltar para denúncias</a></p></section>`), "Denúncia indisponível");
+      setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure({ code: "NOT_FOUND" }, true)}<p><a class="btn secondary" href="${backHref}">Voltar para denúncias</a></p></section>`), "Denúncia indisponível");
       return;
     }
     try {
@@ -914,13 +919,87 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       } else if (report.report_status === "in_review") {
         actionForm = `<form class="form admin-report-transition-form" id="admin-report-transition-form" data-id="${esc(report.report_id)}"><label for="admin-report-status-choice">Decisão<select class="control" id="admin-report-status-choice" name="status" required><option value="">Selecione</option><option value="resolved">Resolver denúncia</option><option value="dismissed">Descartar denúncia</option></select></label><label for="admin-report-reason">Justificativa obrigatória<textarea class="control" id="admin-report-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-report-reason-help"></textarea></label><span class="hint" id="admin-report-reason-help">De 10 a 500 caracteres. A justificativa será mantida no histórico administrativo.</span><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Registrar decisão</button></form>`;
       }
+      const occurrenceHref = `#admin/ocorrencias/${encodeURIComponent(report.occurrence_id)}${routeInfo().source === "moderacao" ? "?from=moderacao" : ""}`;
       const occurrenceMarkup = occurrenceAvailable
-        ? `<dl class="admin-user-details"><div><dt>Identificador do alerta</dt><dd><code>${esc(report.occurrence_id)}</code></dd></div><div><dt>Animal</dt><dd>${esc(report.pet_name || "Sem vínculo")} · ${esc(species[report.pet_species] || "Espécie não informada")}</dd></div><div><dt>Tipo / situação</dt><dd>${esc(types[report.occurrence_type] || "Indisponível")} · ${esc(states[report.occurrence_status] || "Indisponível")}</dd></div><div><dt>Visibilidade</dt><dd>${esc(report.occurrence_visibility === "under_review" ? "Em análise de moderação" : "Pública")}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(report.city)} · ${esc(report.region)}${report.public_reference ? ` · ${esc(report.public_reference)}` : ""}</dd></div><div><dt>Último registro</dt><dd>${esc(fmtDate(report.last_seen_at, true))}</dd></div><div class="full"><dt>Descrição pública do alerta</dt><dd>${esc(report.occurrence_description)}</dd></div>${report.pet_breed || report.pet_coat_description || report.pet_distinctive_features ? `<div class="full"><dt>Características públicas do animal</dt><dd>${[report.pet_breed, report.pet_coat_description, report.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><p><a class="btn secondary" href="#admin/ocorrencias/${encodeURIComponent(report.occurrence_id)}">Abrir moderação do alerta e fotografias autorizadas</a></p>`
+        ? `<dl class="admin-user-details"><div><dt>Identificador do alerta</dt><dd><code>${esc(report.occurrence_id)}</code></dd></div><div><dt>Animal</dt><dd>${esc(report.pet_name || "Sem vínculo")} · ${esc(species[report.pet_species] || "Espécie não informada")}</dd></div><div><dt>Tipo / situação</dt><dd>${esc(types[report.occurrence_type] || "Indisponível")} · ${esc(states[report.occurrence_status] || "Indisponível")}</dd></div><div><dt>Visibilidade</dt><dd>${esc(report.occurrence_visibility === "under_review" ? "Em análise de moderação" : "Pública")}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(report.city)} · ${esc(report.region)}${report.public_reference ? ` · ${esc(report.public_reference)}` : ""}</dd></div><div><dt>Último registro</dt><dd>${esc(fmtDate(report.last_seen_at, true))}</dd></div><div class="full"><dt>Descrição pública do alerta</dt><dd>${esc(report.occurrence_description)}</dd></div>${report.pet_breed || report.pet_coat_description || report.pet_distinctive_features ? `<div class="full"><dt>Características públicas do animal</dt><dd>${[report.pet_breed, report.pet_coat_description, report.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><p><a class="btn secondary" href="${occurrenceHref}">Abrir moderação do alerta e fotografias autorizadas</a></p>`
         : `<div class="notice"><strong>Conteúdo do alerta indisponível</strong><p>A visibilidade atual não permite consultar o conteúdo ou as fotografias por esta análise.</p><code>${esc(report.occurrence_id)}</code></div>`;
-      setPage(adminFrame("reports", `<section class="admin-content admin-report-detail"><p><a class="back-link" href="#admin/denuncias">‹ Voltar à fila de denúncias</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-report-category">${esc(reportCategories[report.category] || report.category)}</span><span class="admin-status ${report.report_status === "open" ? "suspended" : report.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[report.report_status] || report.report_status)}</span></div><h2 id="admin-report-title">Análise da denúncia</h2><p>Protocolo <code>${esc(report.report_id)}</code> · Enviada ${esc(fmtDate(report.created_at, true))}</p></div><section class="admin-report-body"><h3>Descrição complementar</h3><p>${esc(report.description)}</p></section><section class="admin-report-related"><h3>Ocorrência relacionada</h3>${occurrenceMarkup}</section><section class="admin-account-action" aria-labelledby="admin-report-decision-title"><h3 id="admin-report-decision-title">Triagem e decisão</h3>${actionForm}</section>${adminReportHistoryMarkup(history)}<p><a class="btn secondary" href="#admin/denuncias">Voltar à fila</a></p></section>`), "Análise da denúncia");
+      setPage(adminFrame("reports", `<section class="admin-content admin-report-detail"><p><a class="back-link" href="${backHref}">‹ Voltar à fila de denúncias</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-report-category">${esc(reportCategories[report.category] || report.category)}</span><span class="admin-status ${report.report_status === "open" ? "suspended" : report.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[report.report_status] || report.report_status)}</span></div><h2 id="admin-report-title">Análise da denúncia</h2><p>Protocolo <code>${esc(report.report_id)}</code> · Enviada ${esc(fmtDate(report.created_at, true))}</p></div><section class="admin-report-body"><h3>Descrição complementar</h3><p>${esc(report.description)}</p></section><section class="admin-report-related"><h3>Ocorrência relacionada</h3>${occurrenceMarkup}</section><section class="admin-account-action" aria-labelledby="admin-report-decision-title"><h3 id="admin-report-decision-title">Triagem e decisão</h3>${actionForm}</section>${adminReportHistoryMarkup(history)}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise da denúncia");
     } catch (error) {
-      if (ticket === generation) setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure(error, true)}<p><a class="btn secondary" href="#admin/denuncias">Voltar para denúncias</a></p></section>`), "Análise da denúncia");
+      if (ticket === generation) setPage(adminFrame("reports", `<section class="admin-content">${adminReportFailure(error, true)}<p><a class="btn secondary" href="${backHref}">Voltar para denúncias</a></p></section>`), "Análise da denúncia");
     }
+  }
+  const moderationStatuses = Object.freeze({
+    pending: "Pendentes", open: "Abertas", in_review: "Em análise",
+    under_review: "Ocultas", resolved: "Resolvidas", dismissed: "Descartadas", all: "Todas",
+  });
+  function adminModerationMarkup() {
+    const controls = `<form class="admin-moderation-controls" id="admin-moderation-controls" aria-label="Filtros da central de moderação">
+      <label for="admin-moderation-query">Buscar protocolo, animal ou informação pública<input class="control" id="admin-moderation-query" type="search" maxlength="120" autocomplete="off" value="${esc(adminModeration.query)}" placeholder="Identificador ou nome do animal"></label>
+      <label for="admin-moderation-kind">Tipo de item<select class="control" id="admin-moderation-kind"><option value="all">Denúncias e ocorrências</option><option value="report" ${adminModeration.kind === "report" ? "selected" : ""}>Denúncias</option><option value="occurrence" ${adminModeration.kind === "occurrence" ? "selected" : ""}>Ocorrências ocultas</option></select></label>
+      <label for="admin-moderation-status">Situação<select class="control" id="admin-moderation-status">${Object.entries(moderationStatuses).map(([key, label]) => `<option value="${key}" ${adminModeration.status === key ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label for="admin-moderation-from">Criado a partir de<input class="control" id="admin-moderation-from" type="date" value="${esc(adminModeration.createdFrom)}"></label>
+      <label for="admin-moderation-to">Criado até<input class="control" id="admin-moderation-to" type="date" value="${esc(adminModeration.createdTo)}"></label>
+      <label for="admin-moderation-order">Ordenação<select class="control" id="admin-moderation-order"><option value="priority" ${adminModeration.order === "priority" ? "selected" : ""}>Prioridade</option><option value="newest" ${adminModeration.order === "newest" ? "selected" : ""}>Mais recentes</option><option value="oldest" ${adminModeration.order === "oldest" ? "selected" : ""}>Mais antigas</option></select></label>
+    </form>`;
+    return adminFrame("moderation", `<section class="admin-content admin-moderation" aria-labelledby="admin-moderation-title">
+      <div class="admin-content-heading"><h2 id="admin-moderation-title">Central de moderação</h2><p>Fila unificada de denúncias e ocorrências ocultas. As decisões e seus históricos permanecem nos fluxos auditados existentes.</p></div>
+      <section id="admin-moderation-metrics" class="admin-moderation-metrics" aria-label="Indicadores de moderação" aria-live="polite"><p class="hint">Carregando indicadores…</p></section>
+      ${controls}<p id="admin-moderation-results-status" class="hint" role="status" aria-live="polite">Carregando itens…</p><div id="admin-moderation-results" aria-live="polite" aria-busy="true"></div>
+      <p class="hint">Os detalhes completos, fotografias autorizadas e ações ficam nas telas próprias de análise. A central não exibe identidade de denunciantes, contatos privados ou coordenadas exatas.</p>
+    </section>`);
+  }
+  function adminModerationQueueMarkup(result) {
+    const rows = result.items || [];
+    if (!rows.length) return `<div class="notice"><strong>${adminModeration.query || adminModeration.kind !== "all" || adminModeration.status !== "pending" || adminModeration.createdFrom || adminModeration.createdTo ? "Nenhum item encontrado" : "Fila de moderação vazia"}</strong><p>Não há itens reais que correspondam aos filtros selecionados.</p></div>`;
+    const start = (adminModeration.page - 1) * adminModeration.pageSize + 1;
+    const end = Math.min(start + rows.length - 1, result.total);
+    const pages = Math.max(1, Math.ceil(result.total / adminModeration.pageSize));
+    return `<div class="admin-moderation-list">${rows.map((row) => {
+      const isReport = row.item_type === "report";
+      const itemTitle = isReport ? (reportCategories[row.category] || row.category) : "Ocorrência oculta";
+      const href = isReport
+        ? `#admin/denuncias/${encodeURIComponent(row.item_id)}?from=moderacao`
+        : `#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}?from=moderacao`;
+      const statusLabel = reportStatuses[row.item_status] || moderationVisibility[row.occurrence_visibility] || row.item_status;
+      const entityTitle = row.pet_name || "Animal sem vínculo";
+      return `<article class="admin-moderation-card"><header><div class="admin-occurrence-meta"><span class="admin-tag ${isReport ? "" : "lost"}">${isReport ? "Denúncia" : "Ocorrência"}</span><span class="admin-status ${row.item_status === "open" || row.item_status === "under_review" ? "suspended" : row.item_status === "resolved" ? "active" : ""}">${esc(statusLabel)}</span></div><h3>${esc(entityTitle)} · ${esc(itemTitle)}</h3></header><dl><div><dt>Animal / alerta</dt><dd>${esc(types[row.occurrence_type] || "Tipo indisponível")} · ${esc(states[row.occurrence_status] || "Situação indisponível")}</dd></div><div><dt>Região pública aproximada</dt><dd>${row.city ? `${esc(row.city)} · ${esc(row.region || "")}` : "Indisponível"}</dd></div><div><dt>Criado</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div><div><dt>Protocolo</dt><dd><code>${esc(row.item_id)}</code></dd></div>${isReport ? `<div><dt>Denúncias ativas neste alerta</dt><dd>${metric(row.active_report_count)}</dd></div>` : ""}</dl>${row.description ? `<p class="admin-moderation-description">${esc(row.description)}</p>` : ""}<a class="btn secondary small" href="${href}">Analisar ${isReport ? "denúncia" : "ocorrência"}</a></article>`;
+    }).join("")}</div><nav class="admin-pagination" aria-label="Paginação da central de moderação"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-moderation-page" data-page="${adminModeration.page - 1}" ${adminModeration.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminModeration.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-moderation-page" data-page="${adminModeration.page + 1}" ${adminModeration.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+  }
+  function adminModerationFailure(error) {
+    const denied = error?.code === "DENIED" || error?.code === "AUTH_REQUIRED";
+    return `<div class="notice"><strong>${denied ? "Acesso negado" : "Central indisponível"}</strong><p>${denied ? "Sua conta não está autorizada a consultar esta fila." : error?.code === "NOT_PUBLISHED" ? "A RPC da central ainda não está publicada neste ambiente." : "Não foi possível consultar a fila real. Tente novamente."}</p></div><p><button class="btn secondary" type="button" data-action="admin-moderation-retry">Tentar novamente</button></p>`;
+  }
+  async function loadAdminModeration(ticket) {
+    const request = ++adminModeration.request;
+    const filters = { ...adminModeration };
+    const status = document.querySelector("#admin-moderation-results-status");
+    const results = document.querySelector("#admin-moderation-results");
+    const metrics = document.querySelector("#admin-moderation-metrics");
+    if (!results) return;
+    results.setAttribute("aria-busy", "true");
+    if (status) status.textContent = "Consultando a fila de moderação…";
+    try {
+      const [summary, queue] = await Promise.all([
+        D.getAdminModerationMetrics(), D.listAdminModerationQueue(filters),
+      ]);
+      if (ticket !== generation || request !== adminModeration.request || routeInfo().id !== "moderacao") return;
+      adminModeration.page = queue.page ?? filters.page;
+      if (metrics) metrics.innerHTML = `<div class="admin-metrics">${adminMetric("shield", summary.open_reports, "Denúncias abertas")}${adminMetric("search", summary.in_review_reports, "Denúncias em análise")}${adminMetric("search", summary.hidden_occurrences, "Ocorrências ocultas")}${adminMetric("heart", summary.resolved_reports, "Denúncias resolvidas")}${adminMetric("shield", summary.dismissed_reports, "Denúncias descartadas")}${adminMetric("calendar", summary.decisions_last_30_days, "Decisões nos últimos 30 dias")}</div>`;
+      results.innerHTML = adminModerationQueueMarkup(queue);
+      if (status) status.textContent = `${metric(queue.total)} ${queue.total === 1 ? "item encontrado" : "itens encontrados"}.`;
+      results.removeAttribute("aria-busy");
+    } catch (error) {
+      if (ticket !== generation || request !== adminModeration.request) return;
+      if (metrics) metrics.innerHTML = "";
+      results.innerHTML = adminModerationFailure(error);
+      if (status) status.textContent = "Consulta indisponível.";
+      results.removeAttribute("aria-busy");
+    }
+  }
+  async function adminModerationPage(ticket) {
+    if (!window.BPPermissions?.can("moderate")) return adminDenied();
+    setPage(adminModerationMarkup(), "Central de moderação");
+    await loadAdminModeration(ticket);
   }
   function adminDenied() {
     setPage(shell("Acesso negado", "Esta área exige uma conta administrativa ou de moderação ativa.", `<div class="notice"><strong>Acesso protegido</strong><p>Não foi possível autorizar o acesso a esta área.</p></div><div class="actions"><a class="btn primary" href="#painel-tutor">Voltar à minha área</a></div>`, true), "Acesso negado");
@@ -997,7 +1076,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         return;
       }
       chrome(route === "map" ? "mapa" : route);
-      if (route === "admin" && (["ocorrencias", "denuncias"].includes(id)
+      if (route === "admin" && (["ocorrencias", "denuncias", "moderacao"].includes(id)
         ? !window.BPPermissions?.can("moderate")
         : !window.BPPermissions?.can("viewAdminDashboard"))) {
         adminDenied();
@@ -1031,6 +1110,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         if (detailId) await adminOccurrenceDetails(detailId, ticket);
         else await adminOccurrencesPage(ticket);
       }
+      else if (route === "admin" && id === "moderacao") await adminModerationPage(ticket);
       else if (route === "admin" && id === "denuncias") {
         if (detailId) await adminOccurrenceReportDetails(detailId, ticket);
         else await adminReportsPage(ticket);
@@ -1286,6 +1366,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         }
       } else if (action === "admin-report-retry") {
         await loadAdminReports(generation);
+      } else if (action === "admin-moderation-page") {
+        const page = Number(target.dataset.page);
+        if (Number.isInteger(page) && page >= 1) {
+          adminModeration.page = page;
+          await loadAdminModeration(generation);
+        }
+      } else if (action === "admin-moderation-retry") {
+        await loadAdminModeration(generation);
       } else if (action === "admin-report-retry-detail") {
         await adminOccurrenceReportDetails(routeInfo().detailId, generation);
       } else if (action === "admin-occurrence-page") {
@@ -1390,6 +1478,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "admin-moderation-query") {
+      adminModeration.query = event.target.value;
+      adminModeration.page = 1;
+      adminModeration.request++;
+      clearTimeout(adminModeration.searchTimer);
+      adminModeration.searchTimer = setTimeout(() => { void loadAdminModeration(generation); }, 300);
+      return;
+    }
     if (event.target.id === "admin-report-query") {
       adminReports.query = event.target.value;
       adminReports.page = 1;
@@ -1424,6 +1520,19 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
   }
   function onChange(event) {
+    if (["admin-moderation-kind", "admin-moderation-status", "admin-moderation-order", "admin-moderation-from", "admin-moderation-to"].includes(event.target.id)) {
+      const key = {
+        "admin-moderation-kind": "kind", "admin-moderation-status": "status",
+        "admin-moderation-order": "order", "admin-moderation-from": "createdFrom",
+        "admin-moderation-to": "createdTo",
+      }[event.target.id];
+      adminModeration[key] = event.target.value;
+      adminModeration.page = 1;
+      adminModeration.request++;
+      clearTimeout(adminModeration.searchTimer);
+      void loadAdminModeration(generation);
+      return;
+    }
     if (["admin-report-status", "admin-report-category", "admin-report-from", "admin-report-to", "admin-report-order"].includes(event.target.id)) {
       const key = {
         "admin-report-status": "status", "admin-report-category": "category",

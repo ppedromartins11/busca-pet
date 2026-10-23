@@ -956,6 +956,18 @@ button {
 .admin-report-controls .control { width: 100%; }
 .admin-report-search { grid-column: span 2; }
 .admin-report-list { display: grid; gap: 14px; margin-top: 18px; }
+.admin-moderation-metrics { margin: 0 0 22px; }
+.admin-moderation-controls { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(150px, 1fr)); gap: 12px; margin: 0 0 18px; }
+.admin-moderation-controls label { display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: 0.84rem; font-weight: 700; }
+.admin-moderation-list { display: grid; gap: 14px; margin-top: 18px; }
+.admin-moderation-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.admin-moderation-card h3 { margin: 8px 0 14px; overflow-wrap: anywhere; }
+.admin-moderation-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.admin-moderation-card dl > div { min-width: 0; }
+.admin-moderation-card dt { color: var(--muted); font-size: 0.76rem; }
+.admin-moderation-card dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.admin-moderation-card code { overflow-wrap: anywhere; }
+.admin-moderation-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .admin-report-card,
 .admin-report-body,
 .admin-report-related {
@@ -1046,6 +1058,8 @@ button {
   .admin-header-actions { width: 100%; }
   .admin-header-actions .btn { flex: 1 1 auto; justify-content: center; }
   .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-moderation-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-moderation-controls label:first-child { grid-column: 1 / -1; }
   .admin-user-controls { grid-template-columns: 1fr; }
   .admin-user-search { grid-column: auto; }
   .admin-occurrence-controls { grid-template-columns: 1fr; }
@@ -1061,6 +1075,9 @@ button {
 }
 @media (max-width: 420px) {
   .admin-metrics { grid-template-columns: 1fr; }
+  .admin-moderation-controls { grid-template-columns: minmax(0, 1fr); }
+  .admin-moderation-controls label:first-child { grid-column: auto; }
+  .admin-moderation-card dl { grid-template-columns: minmax(0, 1fr); }
   .admin-user-details { grid-template-columns: 1fr; }
   .admin-user-details > .full { grid-column: auto; }
 }

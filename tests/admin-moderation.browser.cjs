@@ -44,11 +44,47 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
         total_count: 23,
       }));
       const auditRows = [];
-      window.__moderationTest = { rows, history: auditRows, calls: [] };
+      const reportId = (index) => `95400000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+      const moderationItems = Array.from({ length: 21 }, (_, index) => ({
+        item_type: "report", item_id: reportId(index), occurrence_id: occurrenceId,
+        category: "other", item_status: "open", created_at: new Date(Date.UTC(2026, 9, 23, 12, 0, 0) - index * 60_000).toISOString(),
+        updated_at: new Date().toISOString(), occurrence_type: "lost", occurrence_status: "active",
+        occurrence_visibility: "public", city: "Cuiabá", region: "Centro", public_reference: "Praça",
+        pet_name: `Denúncia ${index + 1}`, pet_species: "dog", description: `Fila de teste ${index + 1}`,
+        active_report_count: 1,
+      }));
+      window.__moderationTest = { rows, history: auditRows, calls: [], moderationItems, reportId, releaseInitialQueue: null, deferInitialQueue: false };
       const client = window.BPSupabase.client;
       client.auth.getUser = async () => ({ data: { user: { id: userId } }, error: null });
       client.rpc = async (name, params = {}) => {
         window.__moderationTest.calls.push({ name, params });
+        if (name === "admin_moderation_metrics") return { data: [{
+          open_reports: moderationItems.length, in_review_reports: 0, hidden_occurrences: 0,
+          resolved_reports: 0, dismissed_reports: 0, decisions_last_30_days: 0,
+        }], error: null };
+        if (name === "admin_moderation_queue") {
+          const source = params.p_query === "fresh-filter"
+            ? [{ ...moderationItems[0], item_id: reportId(100), pet_name: "Fresh filtered result", description: "Fresh filtered result" }]
+            : moderationItems;
+          const start = (params.p_page - 1) * params.p_page_size;
+          const rowsForPage = source.slice(start, start + params.p_page_size)
+            .map((row) => ({ ...row, total_count: source.length }));
+          if (window.__moderationTest.deferInitialQueue && !params.p_query && !window.__moderationTest.releaseInitialQueue) {
+            window.__moderationTest.deferInitialQueue = false;
+            return new Promise((resolve) => {
+              window.__moderationTest.releaseInitialQueue = () => resolve({ data: rowsForPage, error: null });
+            });
+          }
+          return { data: rowsForPage, error: null };
+        }
+        if (name === "admin_get_occurrence_report") return { data: [{
+          report_id: params.p_report, occurrence_id: occurrenceId, category: "other", description: "Descrição complementar do teste.",
+          report_status: "open", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          occurrence_type: "lost", occurrence_status: "active", occurrence_visibility: "public",
+          city: "Cuiabá", region: "Centro", public_reference: "Praça", last_seen_at: new Date().toISOString(),
+          occurrence_description: "Ocorrência pública para revisão.", pet_name: "Bolinha", pet_species: "dog",
+        }], error: null };
+        if (name === "admin_list_occurrence_report_history") return { data: [], error: null };
         if (name === "admin_list_occurrences") {
           let filtered = rows.filter((row) => row.visibility !== "private");
           if (params.p_query) filtered = filtered.filter((row) =>
@@ -116,6 +152,33 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
     assert.equal(await page.locator("#admin-occurrence-title").innerText(), "Bolinha 1 · Em busca",
       "moderação altera visibilidade sem mudar status da ocorrência");
 
+    await page.goto(`${base}/#admin/moderacao`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Central de moderação" }).waitFor();
+    await page.getByText("1–20 de 21").waitFor();
+    await page.getByRole("button", { name: "Próxima" }).click();
+    await page.getByText("21–21 de 21").waitFor();
+    await page.evaluate(() => window.__moderationTest.moderationItems.pop());
+    await page.getByRole("link", { name: "Analisar denúncia" }).click();
+    await page.getByRole("heading", { name: "Análise da denúncia" }).waitFor();
+    await page.locator(".admin-report-detail a.back-link").click();
+    await page.waitForURL(/#admin\/moderacao$/);
+    await page.getByText("1–20 de 20").waitFor();
+    await page.getByText("Página 1 de 1").waitFor();
+    assert.equal(await page.getByRole("button", { name: "Próxima" }).isDisabled(), true,
+      "recovery keeps the total and disables navigation after the concurrent removal");
+
+    await page.evaluate(() => { window.__moderationTest.deferInitialQueue = true; });
+    await page.goto(`${base}/#admin/ocorrencias`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${base}/#admin/moderacao`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Central de moderação" }).waitFor();
+    await page.waitForFunction(() => typeof window.__moderationTest.releaseInitialQueue === "function");
+    await page.locator("#admin-moderation-query").fill("fresh-filter");
+    await page.getByText("Fresh filtered result", { exact: true }).waitFor();
+    await page.evaluate(() => window.__moderationTest.releaseInitialQueue());
+    await page.waitForTimeout(50);
+    assert.equal(await page.locator("#admin-moderation-results").innerText().then((text) => text.includes("Fresh filtered result")), true,
+      "a stale response cannot overwrite results for a newer filter");
+
     const widths = [320, 390, 768, 1440];
     const overflow = [];
     for (const width of widths) {
@@ -133,7 +196,7 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
     console.log(JSON.stringify({
       result: "passed",
       backend: "local fake endpoint with blocked network and fixture-only rows",
-      checks: ["search", "type/status filters", "pagination", "photo detail", "hide/restore", "audit", "status preserved"],
+      checks: ["search", "type/status filters", "occurrence pagination", "queue page recovery after concurrent removal", "updated total and navigation state", "newer filters survive late stale responses", "photo detail", "hide/restore", "audit", "status preserved"],
       responsiveWidths: widths,
       horizontalOverflow: overflow.some(Boolean),
       pageErrors: errors,

@@ -24,6 +24,7 @@ const chrome = process.env.CHROME_PATH || [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 ].find((file) => fs.existsSync(file));
 let occurrenceId = "";
+let hiddenOccurrenceId = "";
 let petId = "";
 let photoPath = "";
 let browser;
@@ -83,6 +84,14 @@ function runLocalSql(sql) {
       status: "active", visibility: "public", city: "Cuiabá", region: "Centro",
       public_reference: "Praça de teste", last_seen_at: new Date().toISOString(),
       description: "Ocorrência pública sintética para validar denúncia local.",
+    });
+    if (result.error) throw result.error;
+    hiddenOccurrenceId = randomUUID();
+    result = await service.from("occurrences").insert({
+      id: hiddenOccurrenceId, pet_id: petId, reporter_id: owner.id, type: "found",
+      status: "active", visibility: "under_review", city: "Cuiabá", region: "Porto",
+      last_seen_at: new Date().toISOString(),
+      description: "Ocorrência oculta sintética para validar a central local.",
     });
     if (result.error) throw result.error;
     result = await service.storage.from("pet-media").upload(photoPath, png, { contentType: "image/png", upsert: false });
@@ -172,6 +181,45 @@ function runLocalSql(sql) {
     await page.locator('#real-login [name="password"]').fill(moderatorA.password);
     await page.locator('#real-login button[type="submit"]').click();
     await page.waitForURL(/#painel-tutor$/);
+    await page.goto(`${base}/#admin/moderacao`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Central de moderação" }).waitFor();
+    await page.getByText("Denúncias abertas", { exact: true }).waitFor();
+    await page.locator("#admin-moderation-query").fill(submittedId);
+    await page.getByText("1 item encontrado.", { exact: true }).waitFor();
+    const centralText = await page.locator("#admin-moderation-results").innerText();
+    assert.equal(centralText.includes(reporter.email), false, "central must not expose reporter contact data");
+    assert.equal(centralText.includes(reporter.id), false, "central must not expose reporter identifiers");
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => document.fonts.ready);
+      const dimensions = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      assert.ok(dimensions.scroll <= dimensions.client + 1, `central should not overflow at ${width}px`);
+    }
+    await page.getByRole("link", { name: "Analisar denúncia" }).click();
+    await page.getByRole("heading", { name: "Análise da denúncia" }).waitFor();
+    assert.equal((await page.locator(".admin-report-detail").innerText()).includes(reporter.email), false);
+    await page.locator(".admin-report-detail a.back-link").click();
+    await page.waitForURL(/#admin\/moderacao$/);
+    assert.equal(await page.locator("#admin-moderation-query").inputValue(), submittedId, "central filters persist when returning from contextual details");
+    await page.locator("#admin-moderation-kind").selectOption("occurrence");
+    await page.locator("#admin-moderation-status").selectOption("under_review");
+    await page.locator("#admin-moderation-query").fill(hiddenOccurrenceId);
+    await page.getByText("1 item encontrado.", { exact: true }).waitFor();
+    await page.getByRole("link", { name: "Analisar ocorrência" }).click();
+    await page.getByRole("heading", { name: /Pet de denúncia local/ }).waitFor();
+    await page.locator("#admin-occurrence-reason").fill("Revisão local concluída; publicação pode ser restaurada.");
+    await page.getByRole("button", { name: "Restaurar visibilidade pública" }).click();
+    await page.getByText("Visibilidade restaurada e decisão registrada.", { exact: true }).waitFor();
+    const restoredCheck = await service.from("occurrences").select("status,visibility").eq("id", hiddenOccurrenceId).single();
+    assert.equal(restoredCheck.data.visibility, "public");
+    assert.equal(restoredCheck.data.status, "active", "visibility action must not change the occurrence search status");
+    await page.locator(".admin-occurrence-detail a.back-link").click();
+    await page.waitForURL(/#admin\/moderacao$/);
+    assert.equal(await page.locator("#admin-moderation-query").inputValue(), hiddenOccurrenceId);
+    await page.getByText("0 itens encontrados.", { exact: true }).waitFor();
     await page.goto(`${base}/#admin/denuncias`, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Denúncias" }).waitFor();
     await page.locator("#admin-report-query").fill(submittedId);
@@ -206,7 +254,7 @@ function runLocalSql(sql) {
     console.log(JSON.stringify({
       result: "passed",
       backend: "local Supabase Auth, PostgreSQL RPC/RLS and private Storage",
-      checks: ["authenticated submission", "anonymous and suspended denial", "per-user privacy", "duplicate prevention", "moderator triage and dismissal", "queue/detail without reporter identity", "resolution and audit", "authorized linked photo", "public occurrence unchanged"],
+      checks: ["authenticated submission", "anonymous and suspended denial", "per-user privacy", "duplicate prevention", "moderator triage and dismissal", "unified report/hidden-occurrence queue", "combined search and source-detail links", "filter and pagination state preserved on return", "reporter identity omitted", "contextual occurrence restore with audit", "occurrence search status unchanged", "responsive widths 320/390/768/1440", "resolution and audit", "authorized linked photo", "public occurrence unchanged"],
       browserErrors: errors,
     }, null, 2));
   } finally {
@@ -222,6 +270,12 @@ function runLocalSql(sql) {
       catch { cleanupErrors.push("Local report/history fixture cleanup failed"); }
       const removedOccurrence = await service.from("occurrences").delete().eq("id", occurrenceId);
       if (removedOccurrence.error) cleanupErrors.push("Local occurrence fixture cleanup failed");
+    }
+    if (hiddenOccurrenceId) {
+      try { runLocalSql(`delete from buscapet_private.admin_audit where occurrence_id = '${hiddenOccurrenceId}'`); }
+      catch { cleanupErrors.push("Local moderation audit fixture cleanup failed"); }
+      const removedHidden = await service.from("occurrences").delete().eq("id", hiddenOccurrenceId);
+      if (removedHidden.error) cleanupErrors.push("Local hidden occurrence fixture cleanup failed");
     }
     if (petId) {
       const removedPet = await service.from("pets").delete().eq("id", petId);

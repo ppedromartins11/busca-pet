@@ -221,6 +221,38 @@ test("denúncias conectadas usam somente RPCs e validam os campos antes do envio
   await assert.rejects(store.listAdminOccurrenceReports({ order: "random" }), { code: "VALIDATION" });
 });
 
+test("central de moderação consulta RPCs agregadas sem acesso direto às tabelas", async () => {
+  const { client, calls } = clientMock((call) => {
+    if (call.name === "admin_moderation_metrics") return { data: [{
+      open_reports: 4, in_review_reports: 2, hidden_occurrences: 1,
+      resolved_reports: 5, dismissed_reports: 3, decisions_last_30_days: 6,
+    }], error: null };
+    if (call.name === "admin_moderation_queue") return { data: [{
+      item_type: "report", item_id: OCCURRENCE_ID, occurrence_id: OCCURRENCE_ID,
+      item_status: "open", total_count: 7,
+    }], error: null };
+    return { data: null, error: null };
+  });
+  const store = createRemoteStore(client);
+  const metrics = await store.getAdminModerationMetrics();
+  const queue = await store.listAdminModerationQueue({
+    kind: "report", status: "open", query: "Luna", order: "oldest",
+    createdFrom: "2026-10-01", createdTo: "2026-10-23", page: 2, pageSize: 10,
+  });
+  assert.equal(metrics.hidden_occurrences, 1);
+  assert.equal(queue.total, 7);
+  assert.equal(queue.items[0].item_type, "report");
+  assert.deepEqual(calls.map((call) => call.name), ["admin_moderation_metrics", "admin_moderation_queue"]);
+  assert.deepEqual(calls[1].params, {
+    p_kind: "report", p_status: "open", p_query: "Luna", p_order: "oldest",
+    p_created_from: "2026-10-01", p_created_to: "2026-10-23", p_page: 2, p_page_size: 10,
+  });
+  assert.deepEqual(calls.filter((call) => call.kind === "query"), []);
+  await assert.rejects(store.listAdminModerationQueue({ kind: "private" }), { code: "VALIDATION" });
+  await assert.rejects(store.listAdminModerationQueue({ status: "invented" }), { code: "VALIDATION" });
+  await assert.rejects(store.listAdminModerationQueue({ pageSize: 100 }), { code: "VALIDATION" });
+});
+
 test("limite temporário e conflito concorrente de denúncia têm mensagens seguras", async () => {
   for (const [code, expected] of [["P0001", "RATE_LIMIT"], ["PT409", "CONFLICT"]]) {
     const { client } = clientMock(() => ({ data: null, error: { code } }));
@@ -228,6 +260,46 @@ test("limite temporário e conflito concorrente de denúncia têm mensagens segu
       OCCURRENCE_ID, "other", "Descrição complementar suficientemente clara.",
     ), { code: expected });
   }
+});
+
+test("central recovers when the last page item is removed concurrently", async () => {
+  const responses = [[], Array.from({ length: 20 }, (_, index) => ({ item_id: `first-${index}`, total_count: 20 }))];
+  const { client, calls } = clientMock((call) => call.name === "admin_moderation_queue"
+    ? { data: responses.shift(), error: null } : { data: null, error: null });
+  const result = await createRemoteStore(client).listAdminModerationQueue({ page: 2, pageSize: 20, query: "same-filter" });
+  assert.equal(result.total, 20);
+  assert.equal(result.page, 1);
+  assert.equal(result.items.length, 20);
+  assert.deepEqual(calls.filter((call) => call.kind === "rpc").map((call) => call.params.p_page), [2, 1]);
+});
+
+test("central clamps removed pages to the last currently valid page", async () => {
+  const responses = [[], Array.from({ length: 20 }, (_, index) => ({ item_id: `first-${index}`, total_count: 45 })),
+    Array.from({ length: 5 }, (_, index) => ({ item_id: `last-${index}`, total_count: 45 }))];
+  const { client, calls } = clientMock((call) => call.name === "admin_moderation_queue"
+    ? { data: responses.shift(), error: null } : { data: null, error: null });
+  const result = await createRemoteStore(client).listAdminModerationQueue({ kind: "report", status: "all", order: "oldest", page: 8, pageSize: 20 });
+  assert.equal(result.total, 45);
+  assert.equal(result.page, 3);
+  assert.equal(result.items.length, 5);
+  assert.deepEqual(calls.filter((call) => call.kind === "rpc").map((call) => call.params.p_page), [8, 1, 3]);
+});
+
+test("central distinguishes a genuinely empty queue and surfaces recovery network failures", async () => {
+  let emptyCalls = 0;
+  const empty = clientMock((call) => call.name === "admin_moderation_queue"
+    ? (emptyCalls++, { data: [], error: null }) : { data: null, error: null });
+  const emptyResult = await createRemoteStore(empty.client).listAdminModerationQueue({ page: 4, pageSize: 20 });
+  assert.deepEqual(emptyResult, { items: [], total: 0, page: 1 });
+  assert.equal(emptyCalls, 2);
+
+  let failedRecoveryCalls = 0;
+  const failed = clientMock((call) => call.name === "admin_moderation_queue"
+    ? (++failedRecoveryCalls === 1 ? { data: [], error: null }
+      : { data: null, error: { name: "FetchError", message: "network unavailable" } })
+    : { data: null, error: null });
+  await assert.rejects(createRemoteStore(failed.client).listAdminModerationQueue({ page: 4, pageSize: 20 }), { code: "UNAVAILABLE" });
+  assert.equal(failedRecoveryCalls, 2);
 });
 
 test("RPC administrativa ausente informa que a funcionalidade ainda não foi publicada", async () => {
