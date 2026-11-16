@@ -23,7 +23,7 @@ function clientMock(reply = () => ({ data: { id: PET_ID }, error: null })) {
         insert(payload) { call.action = "insert"; call.payload = payload; return q; },
         update(payload) { call.action = "update"; call.payload = payload; return q; },
         delete() { call.action = "delete"; return q; },
-        select() { return q; },
+        select(columns) { call.columns = columns ?? "*"; return q; },
         eq(key, value) { call.filters.push([key, value]); return q; },
         in(key, values) { call.filters.push([key, values]); return q; },
         order() { return q; },
@@ -60,6 +60,139 @@ test("animal and occurrence derive owner identity from Auth, ignoring forged fie
   assert.equal(occurrence.payload.visibility, "public");
   assert.equal("status" in occurrence.payload, false);
   assert.equal("active_role" in occurrence.payload, false);
+});
+
+test("public occurrence reads use the explicit safe view projection", async () => {
+  const { client, calls } = clientMock((call) => call.kind === "query"
+    ? { data: [], error: null } : { data: false, error: null });
+  const store = createRemoteStore(client);
+  await store.listPublicOccurrences({ type: "lost", status: "active", city: "Cuiabá", limit: 12, page: 1 });
+  const query = calls.find((call) => call.kind === "query");
+  assert.equal(query.table, "public_occurrences");
+  assert.equal(query.columns,
+    "id,type,status,visibility,city,region,public_reference,last_seen_at,description,reward_cents,created_at");
+  assert.deepEqual(query.filters, [["type", "lost"], ["status", "active"], ["city", "Cuiabá"]]);
+  assert.deepEqual(calls.filter((call) => call.kind === "query" && call.table === "occurrences"), []);
+});
+
+test("owner occurrence list uses the authenticated owner RPC", async () => {
+  const ownRow = { id: OCCURRENCE_ID, pet_id: PET_ID, type: "lost", status: "active" };
+  const { client, calls } = clientMock((call) => call.name === "my_occurrences"
+    ? { data: [ownRow], error: null } : { data: null, error: null });
+  const rows = await createRemoteStore(client).listOwnOccurrences();
+  assert.deepEqual(rows, [ownRow]);
+  assert.deepEqual(calls.filter((call) => call.kind === "rpc").map((call) => call.name), ["my_occurrences"]);
+  assert.deepEqual(calls.filter((call) => call.kind === "query" && call.table === "occurrences"), []);
+});
+
+test("contratos públicos ou pessoais ausentes não são apresentados como administração", async () => {
+  const missingView = clientMock((call) => call.table === "public_occurrences"
+    ? { data: null, error: { code: "PGRST205", status: 404 } }
+    : { data: null, error: null });
+  await assert.rejects(
+    createRemoteStore(missingView.client).listPublicOccurrences(),
+    (error) => error.code === "NOT_PUBLISHED"
+      && error.remoteCode === "PGRST205"
+      && error.status === 404
+      && !/administrativa/i.test(error.message),
+  );
+
+  const missingOwnerRpc = clientMock((call) => call.name === "my_occurrences"
+    ? { data: null, error: { code: "PGRST202", status: 404 } }
+    : { data: null, error: null });
+  await assert.rejects(
+    createRemoteStore(missingOwnerRpc.client).listOwnOccurrences(),
+    (error) => error.code === "NOT_PUBLISHED"
+      && error.remoteCode === "PGRST202"
+      && error.status === 404
+      && !/administrativa/i.test(error.message),
+  );
+});
+
+test("bloqueio R4.4 apresenta manutenção sem expor detalhes do banco", async () => {
+  const blocked = clientMock((call) => call.table === "pets"
+    ? { data: null, error: { code: "PT503", status: 503,
+      message: "BUSCAPET_MAINTENANCE_ACTIVE", details: "private gate" } }
+    : { data: null, error: null });
+  await assert.rejects(
+    createRemoteStore(blocked.client).createPet({ name: "Lua", species: "cat" }),
+    (error) => error.code === "MAINTENANCE"
+      && error.remoteCode === "PT503"
+      && error.status === 503
+      && /manutenção/i.test(error.message)
+      && !/private gate|BUSCAPET_MAINTENANCE_ACTIVE/i.test(error.message),
+  );
+});
+
+test("occurrence details return public fields for others and owner fields only after server ownership", async () => {
+  const publicRow = { id: OCCURRENCE_ID, type: "lost", status: "active", visibility: "public", city: "Cuiabá" };
+  const ownerRow = { ...publicRow, pet_id: PET_ID, updated_at: "2026-10-23T12:00:00.000Z" };
+  const thirdParty = clientMock((call) => {
+    if (call.kind === "query") return { data: publicRow, error: null };
+    if (call.name === "occurrence_is_owner") return { data: false, error: null };
+    return { data: [], error: null };
+  });
+  const thirdPartyResult = await createRemoteStore(thirdParty.client).getOccurrence(OCCURRENCE_ID);
+  assert.deepEqual(thirdPartyResult, { ...publicRow, is_owner: false });
+  assert.equal("reporter_id" in thirdPartyResult, false);
+  assert.equal("pet_id" in thirdPartyResult, false);
+  assert.deepEqual(thirdParty.calls.filter((call) => call.kind === "rpc").map((call) => call.name), ["occurrence_is_owner"]);
+
+  const owner = clientMock((call) => {
+    if (call.kind === "query") return { data: publicRow, error: null };
+    if (call.name === "occurrence_is_owner") return { data: true, error: null };
+    if (call.name === "my_occurrence") return { data: [ownerRow], error: null };
+    return { data: null, error: null };
+  });
+  const ownerResult = await createRemoteStore(owner.client).getOccurrence(OCCURRENCE_ID);
+  assert.deepEqual(ownerResult, { ...ownerRow, is_owner: true });
+  assert.equal("reporter_id" in ownerResult, false);
+  assert.deepEqual(owner.calls.filter((call) => call.kind === "rpc").map((call) => call.name), [
+    "occurrence_is_owner", "my_occurrence",
+  ]);
+
+  const privateOwner = clientMock((call) => {
+    if (call.kind === "query") return { data: null, error: null };
+    if (call.name === "occurrence_is_owner") return { data: true, error: null };
+    if (call.name === "my_occurrence") return { data: [ownerRow], error: null };
+    return { data: null, error: null };
+  });
+  assert.deepEqual(await createRemoteStore(privateOwner.client).getOccurrence(OCCURRENCE_ID), {
+    ...ownerRow, is_owner: true,
+  });
+
+  const nonOwnerPrivate = clientMock((call) => call.kind === "query"
+    ? { data: null, error: null }
+    : call.name === "occurrence_is_owner" ? { data: false, error: null } : { data: [], error: null });
+  assert.equal(await createRemoteStore(nonOwnerPrivate.client).getOccurrence(OCCURRENCE_ID), null);
+  assert.equal(nonOwnerPrivate.calls.some((call) => call.name === "my_occurrence"), false);
+});
+
+test("occurrence INSERT and UPDATE request only id, then read through the owner RPC", async () => {
+  const ownerRow = {
+    id: OCCURRENCE_ID, pet_id: PET_ID, type: "lost", status: "active", visibility: "public",
+    city: "Cuiabá", region: "Centro", description: "Descrição pública do alerta.",
+  };
+  const { client, calls } = clientMock((call) => call.kind === "query"
+    ? { data: { id: OCCURRENCE_ID }, error: null }
+    : call.name === "my_occurrence" ? { data: [ownerRow], error: null } : { data: null, error: null });
+  const store = createRemoteStore(client);
+  const created = await store.createOccurrence({
+    pet_id: PET_ID, type: "lost", city: "Cuiabá", region: "Centro",
+    last_seen_at: "2026-10-23T12:00:00.000Z", description: "Descrição pública do alerta.",
+  });
+  assert.equal(created.is_owner, true);
+  const inserted = calls.find((call) => call.kind === "query" && call.table === "occurrences" && call.action === "insert");
+  assert.equal(inserted.columns, "id");
+  assert.deepEqual(calls.find((call) => call.name === "my_occurrence")?.params, { p_occurrence: OCCURRENCE_ID });
+
+  calls.length = 0;
+  const updated = await store.updateOccurrence(OCCURRENCE_ID, { description: "Descrição atualizada." });
+  assert.equal(updated.is_owner, true);
+  const update = calls.find((call) => call.kind === "query" && call.table === "occurrences" && call.action === "update");
+  assert.equal(update.columns, "id");
+  assert.deepEqual(update.filters, [["id", OCCURRENCE_ID]]);
+  assert.equal(calls.some((call) => call.kind === "query" && call.table === "occurrences" && call.columns === "*"), false);
 });
 
 test("status and exact coordinates use authorized RPC wrappers", async () => {

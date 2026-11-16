@@ -44,31 +44,43 @@ const occurrenceId = "33333333-3333-4333-8333-333333333333";
         type: "found", status: "active", visibility: "public", city: "Cuiabá", region: "Centro",
         public_reference: "Praça central", last_seen_at: new Date().toISOString(), description: "Animal encontrado perto da praça central.", reward_cents: 0,
       };
-      window.__regression = { created: [], occurrence, rpc: [] };
+      window.__regression = { created: [], occurrence, rpc: [], queries: [] };
       const client = window.BPSupabase.client;
       client.auth.getUser = async () => ({ data: { user: { id: userId } }, error: null });
-      client.rpc = async (name) => {
+      client.rpc = async (name, params = {}) => {
         window.__regression.rpc.push(name);
+        if (name === "occurrence_is_owner")
+          return { data: window.__regression.occurrence.reporter_id === userId, error: null };
+        if (name === "my_occurrence") {
+          const { reporter_id, ...ownerRow } = window.__regression.occurrence;
+          return { data: [ownerRow], error: null };
+        }
         return { data: [], error: null };
       };
       client.from = (table) => {
-        let action = "select", payload = null;
+        const call = { table, action: "select" };
+        window.__regression.queries.push(call);
+        let payload = null;
         const query = {
-          select() { return query; },
-          insert(value) { action = "insert"; payload = value; return query; },
-          update(value) { action = "update"; payload = value; return query; },
-          delete() { action = "delete"; return query; },
+          select(columns) { call.columns = columns; return query; },
+          insert(value) { call.action = "insert"; payload = value; return query; },
+          update(value) { call.action = "update"; payload = value; return query; },
+          delete() { call.action = "delete"; return query; },
           eq() { return query; },
           order() { return query; },
           range() { return query; },
           maybeSingle: async () => {
-            if (table === "occurrences" && action === "insert") {
+            if (table === "occurrences" && call.action === "insert") {
               const saved = { ...payload, id: occurrenceId, reporter_id: userId, status: "active" };
               window.__regression.created.push(saved);
               window.__regression.occurrence = saved;
-              return { data: saved, error: null };
+              return { data: { id: occurrenceId }, error: null };
             }
-            return { data: table === "occurrences" ? window.__regression.occurrence : null, error: null };
+            if (table === "public_occurrences") {
+              const { reporter_id, pet_id, ...publicRow } = window.__regression.occurrence;
+              return { data: publicRow, error: null };
+            }
+            return { data: null, error: null };
           },
           then(resolve, reject) {
             const data = table === "pets" ? [{ id: petId, name: "Lua" }]
@@ -151,6 +163,14 @@ const occurrenceId = "33333333-3333-4333-8333-333333333333";
     const rpcCalls = await page.evaluate(() => window.__regression.rpc);
     assert.equal(rpcCalls.includes("set_occurrence_public_location"), false,
       "o marcador do alerta desaparecido não pode ser associado ao alerta encontrado");
+    const queries = await page.evaluate(() => window.__regression.queries);
+    assert.equal(queries.some((call) => call.table === "occurrences" && call.action === "select"), false,
+      "detalhes e feed não devem ler diretamente a tabela privada occurrences");
+    assert.ok(queries.some((call) => call.table === "public_occurrences"
+      && call.columns === "id,type,status,visibility,city,region,public_reference,last_seen_at,description,reward_cents,created_at"),
+    "detalhes públicos solicitam somente a projeção allowlist");
+    assert.ok(queries.some((call) => call.table === "occurrences" && call.action === "insert" && call.columns === "id"),
+      "INSERT solicita somente id e busca os demais dados pelo RPC do proprietário");
 
     assert.deepEqual(exceptions, [], "não deve haver exceções JavaScript no navegador");
 

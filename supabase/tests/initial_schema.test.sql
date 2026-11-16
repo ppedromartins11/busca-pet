@@ -32,7 +32,9 @@ insert into buscapet_private.sighting_locations(sighting_id, exact_location) val
   '40000000-0000-0000-0000-000000000001',
   extensions.st_setsrid(extensions.st_makepoint(-56.1, -15.6), 4326)::extensions.geography);
 
-select ok(has_table_privilege('anon', 'public.occurrences', 'SELECT'), 'public feed grant');
+select ok(has_table_privilege('anon', 'public.public_occurrences', 'SELECT')
+  and not has_table_privilege('anon', 'public.occurrences', 'SELECT'),
+  'public feed uses the safe projection without broad base-table SELECT');
 select ok(not has_column_privilege('authenticated', 'public.profiles', 'active_role', 'UPDATE'), 'no direct role switch');
 select ok(not has_column_privilege('authenticated', 'public.profiles', 'status', 'UPDATE'), 'no direct suspension edit');
 select ok(not has_column_privilege('authenticated', 'public.partner_profiles', 'status', 'UPDATE'), 'no direct partner approval');

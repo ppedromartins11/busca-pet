@@ -7,6 +7,7 @@ const MIME_EXTENSIONS = Object.freeze({
 });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PHOTO_PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i;
+const PUBLIC_OCCURRENCE_COLUMNS = "id,type,status,visibility,city,region,public_reference,last_seen_at,description,reward_cents,created_at";
 
 export class RemoteStoreError extends Error {
   constructor(code, message, details = {}) {
@@ -85,7 +86,10 @@ function safeError(error) {
   const details = {
     status: error?.status ?? error?.statusCode ?? null,
     source: error?.name || "supabase",
+    remoteCode: code || null,
   };
+  if (code === "PT503")
+    return new RemoteStoreError("MAINTENANCE", "O BuscaPet está em manutenção. Aguarde a liberação para salvar alterações.", details);
   if (code === "42501" || code === "PGRST301" || code === "403")
     return new RemoteStoreError("DENIED", "Você não tem permissão para esta operação.", details);
   if (code === "23503")
@@ -102,8 +106,10 @@ function safeError(error) {
     return new RemoteStoreError("VALIDATION", "Revise os dados informados.", details);
   if (code === "P0002")
     return new RemoteStoreError("NOT_FOUND", "O registro solicitado não foi encontrado.", details);
-  if (code === "PGRST202")
-    return new RemoteStoreError("NOT_PUBLISHED", "Esta funcionalidade administrativa ainda não foi publicada neste ambiente.", details);
+  // A schema-cache miss can affect public, personal, or administrative APIs.
+  // Keep the normalized error neutral; each screen supplies its own context.
+  if (code === "PGRST202" || code === "PGRST205")
+    return new RemoteStoreError("NOT_PUBLISHED", "O contrato de dados necessário ainda não foi publicado neste ambiente.", details);
   return new RemoteStoreError("UNAVAILABLE", "Não foi possível concluir a operação. Tente novamente.", details);
 }
 
@@ -228,6 +234,13 @@ export function createRemoteStore(client) {
     const row = await checked(request.maybeSingle());
     if (!row) problem("NOT_FOUND", `${label} não encontrado ou sem permissão.`);
     return row;
+  }
+
+  async function getOwnedOccurrence(id) {
+    const rows = await checked(configured().rpc("my_occurrence", { p_occurrence: requiredUuid(id, "Ocorrência") }));
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row) problem("NOT_FOUND", "Ocorrência não encontrada ou sem permissão.");
+    return { ...row, is_owner: true };
   }
 
   const api = {
@@ -500,7 +513,7 @@ export function createRemoteStore(client) {
       return true;
     },
     async listPublicOccurrences(filters = {}) {
-      let query = configured().from("occurrences").select().eq("visibility", "public");
+      let query = configured().from("public_occurrences").select(PUBLIC_OCCURRENCE_COLUMNS);
       if (filters.type) query = query.eq("type", choice(filters.type, ["lost", "found"], "Tipo"));
       if (filters.status) query = query.eq("status", choice(filters.status, ["active", "located", "reunited", "closed"], "Situação"));
       if (filters.city) query = query.eq("city", requiredText(filters.city, "Cidade", 2, 80));
@@ -509,11 +522,32 @@ export function createRemoteStore(client) {
       return checked(query.order("created_at", { ascending: false }).range(page * limit, page * limit + limit - 1));
     },
     async listOwnOccurrences() {
-      const { id } = await currentUser();
-      return checked(configured().from("occurrences").select().eq("reporter_id", id).order("created_at", { ascending: false }));
+      await currentUser();
+      return checked(configured().rpc("my_occurrences"));
     },
     async getOccurrence(id) {
-      return checked(configured().from("occurrences").select().eq("id", requiredUuid(id, "Ocorrência")).maybeSingle());
+      const occurrenceId = requiredUuid(id, "Ocorrência");
+      const publicRead = checked(configured().from("public_occurrences")
+        .select(PUBLIC_OCCURRENCE_COLUMNS).eq("id", occurrenceId).maybeSingle());
+      const ownerRead = checked(configured().rpc("occurrence_is_owner", {
+        p_occurrence: occurrenceId,
+      })).then((isOwner) => ({ isOwner: isOwner === true }), (error) => ({ error }));
+      const [publicRow, ownership] = await Promise.all([publicRead, ownerRead]);
+
+      // Public details stay available if the optional ownership check is down;
+      // private occurrences still fail closed.
+      if (ownership.error) {
+        if (publicRow) return { ...publicRow, is_owner: false };
+        throw ownership.error;
+      }
+      if (ownership.isOwner) {
+        try {
+          return await getOwnedOccurrence(occurrenceId);
+        } catch (error) {
+          if (!publicRow) throw error;
+        }
+      }
+      return publicRow ? { ...publicRow, is_owner: false } : null;
     },
     async getOccurrencePublicLocation(id) {
       const rows = await checked(configured().rpc("get_occurrence_public_location", {
@@ -566,11 +600,16 @@ export function createRemoteStore(client) {
     },
     async createOccurrence(input) {
       const { id } = await currentUser();
-      return one(configured().from("occurrences").insert({ ...cleanOccurrence(input), reporter_id: id }).select(), "Ocorrência");
+      const inserted = await one(configured().from("occurrences")
+        .insert({ ...cleanOccurrence(input), reporter_id: id }).select("id"), "Ocorrência");
+      return getOwnedOccurrence(inserted.id);
     },
     async updateOccurrence(id, patch) {
       await currentUser();
-      return one(configured().from("occurrences").update(cleanOccurrence(patch, true)).eq("id", requiredUuid(id, "Ocorrência")).select(), "Ocorrência");
+      const occurrenceId = requiredUuid(id, "Ocorrência");
+      await one(configured().from("occurrences").update(cleanOccurrence(patch, true))
+        .eq("id", occurrenceId).select("id"), "Ocorrência");
+      return getOwnedOccurrence(occurrenceId);
     },
     async setOccurrenceStatus(id, status) {
       await currentUser();

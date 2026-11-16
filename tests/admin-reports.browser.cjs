@@ -34,7 +34,7 @@ const reportId = "96300000-0000-4000-8000-000000000001";
         id: occurrenceId, reporter_id: "96100000-0000-4000-8000-000000000001",
         status: "active", visibility: "public", type: "lost", city: "Cuiabá", region: "Centro",
         public_reference: "Praça", last_seen_at: "2026-10-23T12:00:00.000Z",
-        description: "Descrição pública do alerta", pet_id: null,
+        description: "Descrição pública do alerta <img src=x onerror=alert(1)> <script>não execute</script>", pet_id: null,
       };
       const reports = [];
       const history = new Map();
@@ -106,7 +106,11 @@ const reportId = "96300000-0000-4000-8000-000000000001";
       const client = window.BPSupabase.client;
       client.auth.getUser = async () => ({ data: { user: { id: moderator ? moderatorId : userId } }, error: null });
       client.from = (table) => {
-        const query = { select() { return query; }, eq() { return query; }, maybeSingle: async () => ({ data: table === "occurrences" ? { ...occurrence } : null, error: null }) };
+        const query = { select() { return query; }, eq() { return query; }, maybeSingle: async () => {
+          if (table !== "public_occurrences") return { data: null, error: null };
+          const { reporter_id, pet_id, ...publicFields } = occurrence;
+          return { data: publicFields, error: null };
+        } };
         return query;
       };
       client.rpc = async (name, params = {}) => {
@@ -165,6 +169,17 @@ const reportId = "96300000-0000-4000-8000-000000000001";
         const row = makeReport(`96300000-0000-4000-8000-${String(i).padStart(12, "0")}`);
         row.reporter_id = "96100000-0000-4000-8000-000000000001";
         row.total_count = 23;
+        if (i === 2) {
+          row.pet_name = null;
+          row.pet_species = null;
+          row.occurrence_type = "found";
+          row.city = null;
+          row.region = null;
+          row.public_reference = null;
+          row.description = "<img src=x onerror=alert(1)> relato sem nome ou região";
+          row.reporter_email = "reporter-private@example.test";
+          row.exact_coordinates = "-15.123456,-56.123456";
+        }
         reports.push(row);
         history.set(row.report_id, [{ actor_name: "Identidade protegida", action: "submitted", reason: null, created_at: row.created_at }]);
         nextId += 1;
@@ -173,6 +188,25 @@ const reportId = "96300000-0000-4000-8000-000000000001";
     }, { userId, moderatorId, occurrenceId, reportId });
     await page.evaluate(() => { location.hash = `#denunciar/${"96200000-0000-4000-8000-000000000001"}`; });
     await page.getByRole("heading", { name: "Denunciar alerta" }).waitFor();
+    const publicSummary = page.locator(".report-occurrence-summary");
+    await publicSummary.getByRole("heading", { name: "Animal desaparecido" }).waitFor();
+    await publicSummary.getByText("Cuiabá · Centro", { exact: true }).waitFor();
+    await publicSummary.getByText("Praça", { exact: true }).waitFor();
+    await publicSummary.getByText(/Descrição pública do alerta <img src=x onerror=alert\(1\)>/).waitFor();
+    assert.equal(await publicSummary.locator("img, script").count(), 0, "descrição pública é texto, não HTML executável");
+    assert.match(await publicSummary.innerText(), /Identificador técnico do alerta/);
+    assert.match(await publicSummary.innerText(), /Confidencialidade/);
+    assert.equal((await publicSummary.innerText()).includes("pet_id"), false);
+    assert.equal((await publicSummary.innerText()).includes("fixture@example.test"), false);
+    await page.locator("#real-report-category").focus();
+    await page.keyboard.press("Tab");
+    assert.equal(await page.locator("#real-report-description").evaluate((element) => element === document.activeElement), true,
+      "campos do formulário devem manter navegação sequencial por teclado");
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `overflow público em ${width}px`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#real-report-category").selectOption("duplicate_occurrence");
     await page.locator("#real-report-description").fill("Possível duplicidade que precisa ser analisada.");
     await page.locator("#real-occurrence-report-form button[type=submit]").click();
@@ -180,6 +214,19 @@ const reportId = "96300000-0000-4000-8000-000000000001";
     await page.evaluate(() => { location.hash = "#denunciar/96200000-0000-4000-8000-000000000001"; });
     await page.getByText("Você já enviou uma denúncia ativa", { exact: true }).waitFor();
     assert.equal(await page.locator("#real-occurrence-report-form").count(), 0);
+    await page.evaluate(() => {
+      Object.assign(window.__reportTest.occurrence, {
+        id: "96200000-0000-4000-8000-000000000099", type: null, city: "", region: null,
+        public_reference: "  ", description: "  ",
+      });
+      location.hash = "#denunciar/96200000-0000-4000-8000-000000000099";
+    });
+    const optionalSummary = page.locator(".report-occurrence-summary");
+    await optionalSummary.getByRole("heading", { name: "Tipo do alerta indisponível" }).waitFor();
+    await optionalSummary.getByText("Cidade e região aproximada indisponíveis.", { exact: true }).waitFor();
+    await optionalSummary.getByText("Sem referência pública adicional.", { exact: true }).waitFor();
+    await optionalSummary.getByText("Descrição pública indisponível.", { exact: true }).waitFor();
+    assert.match(await optionalSummary.innerText(), /Confidencialidade/);
 
     await page.evaluate(() => { window.__setReportModerator(true); location.hash = "#admin/denuncias"; });
     await page.getByRole("heading", { name: "Denúncias", exact: true }).waitFor();
@@ -188,8 +235,17 @@ const reportId = "96300000-0000-4000-8000-000000000001";
     await page.getByText("Página 2 de 2").waitFor();
     await page.locator("#admin-report-query").fill(reportId);
     await page.getByText("1 denúncia encontrada.", { exact: true }).waitFor();
+    const namedReport = page.locator(".admin-report-card");
+    await namedReport.getByRole("heading", { name: "Lua" }).waitFor();
+    assert.match(await namedReport.innerText(), /Animal: Lua · Cão/);
+    assert.match(await namedReport.innerText(), /Protocolo da denúncia/);
+    assert.match(await namedReport.innerText(), /Identificador do alerta/);
     await page.getByRole("link", { name: "Analisar denúncia" }).waitFor();
-    await page.getByRole("link", { name: "Analisar denúncia" }).click();
+    const analyzeLink = page.getByRole("link", { name: "Analisar denúncia" });
+    await analyzeLink.focus();
+    assert.equal(await analyzeLink.evaluate((element) => element === document.activeElement), true,
+      "ação de análise deve ser alcançável pelo teclado");
+    await page.keyboard.press("Enter");
     await page.getByRole("heading", { name: "Análise da denúncia" }).waitFor();
     await page.getByText("Possível duplicidade que precisa ser analisada.", { exact: true }).waitFor();
     assert.equal((await page.locator(".admin-report-detail").innerText()).includes("fixture@example.test"), false);
@@ -203,8 +259,24 @@ const reportId = "96300000-0000-4000-8000-000000000001";
     await page.getByText("Conteúdo revisado e decisão confirmada.", { exact: false }).waitFor();
     assert.equal(await windowStatus(page), "active");
     await page.goto(`${base}/#admin/denuncias`, { waitUntil: "domcontentloaded" });
-    await page.locator("#admin-report-query").fill("");
-    await page.waitForTimeout(400);
+    await page.locator("#admin-report-query").fill("96300000-0000-4000-8000-000000000002");
+    await page.getByText("1 denúncia encontrada.", { exact: true }).waitFor();
+    const namelessReport = page.locator(".admin-report-card");
+    await namelessReport.getByRole("heading", { name: "Alerta: animal encontrado" }).waitFor();
+    const namelessText = await namelessReport.innerText();
+    assert.match(namelessText, /Informações do animal indisponíveis/);
+    assert.doesNotMatch(namelessText, /Sem vínculo|nome do animal não informado/);
+    assert.match(namelessText, /Região pública aproximada\s+Indisponível/);
+    assert.match(namelessText, /Protocolo da denúncia/);
+    assert.match(namelessText, /Identificador do alerta/);
+    assert.equal(await namelessReport.locator("img").count(), 0, "descrição textual não deve virar HTML");
+    assert.equal(namelessText.includes("reporter-private@example.test"), false);
+    assert.equal(namelessText.includes("-15.123456"), false);
+    await namelessReport.getByRole("link", { name: "Analisar denúncia" }).click();
+    await page.getByRole("heading", { name: "Análise da denúncia" }).waitFor();
+    const namelessDetail = await page.locator(".admin-report-detail").innerText();
+    assert.match(namelessDetail, /Informações do animal indisponíveis/);
+    assert.doesNotMatch(namelessDetail, /Sem vínculo|nome do animal não informado/);
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `overflow em ${width}px`);
@@ -212,7 +284,7 @@ const reportId = "96300000-0000-4000-8000-000000000001";
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({
       result: "passed", backend: "fixture-only local browser; remote network blocked",
-      checks: ["submission confirmation", "active duplicate notice", "admin queue", "pagination", "search", "triage", "resolution reason", "history", "reporter identity omitted"],
+      checks: ["public alert type and public location summary", "public description escaped against HTML", "technical identifier secondary and clearly labeled", "confidentiality notice", "optional public fields use neutral fallbacks", "keyboard form navigation", "submission confirmation", "active duplicate notice", "admin queue", "pagination", "search", "triage", "resolution reason", "history", "named animal/species in admin views", "missing name and region fallback", "report and alert identifiers distinguished", "private reporter/coordinate fields omitted"],
       responsiveWidths: [320, 390, 768, 1440], pageErrors: errors,
     }, null, 2));
   } finally {

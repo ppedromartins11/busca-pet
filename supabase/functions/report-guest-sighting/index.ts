@@ -78,14 +78,46 @@ async function authenticated(request: Request, bytes: Uint8Array, secret: string
   return ok ? { nonce, source } : null
 }
 
+async function authenticatedStatus(request: Request, secret: string): Promise<boolean> {
+  const timestamp = request.headers.get('x-buscapet-timestamp') || ''
+  const nonce = request.headers.get('x-buscapet-nonce') || ''
+  const signature = request.headers.get('x-buscapet-signature') || ''
+  if (!/^\d{10}$/.test(timestamp) || !uuid.test(nonce)
+    || !hashPattern.test(signature)
+    || Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 60) return false
+  const canonical = `GET\n${path}/status\n${timestamp}\n${nonce}`
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'])
+  const bytes = Uint8Array.from(signature.match(/../g)!, (part) => parseInt(part, 16))
+  return crypto.subtle.verify('HMAC', key, bytes, encoder.encode(canonical))
+}
+
 Deno.serve(async (request) => {
-  if (request.method !== 'POST') return reply(405, 'method_not_allowed')
   const secret = Deno.env.get('INGRESS_HMAC_KEY')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   if (!secret || secret.length < 32 || !serviceKey || !supabaseUrl) {
     return reply(503, 'unavailable')
   }
+  const statusRequest = request.method === 'GET'
+    && new URL(request.url).pathname.endsWith(`${path}/status`)
+  if (statusRequest) {
+    if (!await authenticatedStatus(request, secret).catch(() => false)) {
+      return reply(401, 'unauthorized')
+    }
+    if (Deno.env.get('BUSCAPET_WRITE_MODE') !== 'open') {
+      return reply(503, 'maintenance_active')
+    }
+    const db = createClient(supabaseUrl, serviceKey,
+      { auth: { persistSession: false, autoRefreshToken: false } })
+    const { data, error } = await db.rpc('guest_ingress_writes_open')
+    if (error || data !== true) {
+      return reply(503, error?.code === 'PT503' || data === false
+        ? 'maintenance_active' : 'unavailable')
+    }
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
+  }
+  if (request.method !== 'POST') return reply(405, 'method_not_allowed')
   let bytes: Uint8Array
   try { bytes = await readLimited(request) } catch (error) {
     return reply(error instanceof Error && error.message === 'large' ? 413 : 400,
@@ -93,6 +125,9 @@ Deno.serve(async (request) => {
   }
   const ingress = await authenticated(request, bytes, secret).catch(() => null)
   if (!ingress) return reply(401, 'unauthorized')
+  if (Deno.env.get('BUSCAPET_WRITE_MODE') !== 'open') {
+    return reply(503, 'maintenance_active')
+  }
   let body: unknown
   try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) }
   catch { return reply(400, 'invalid_request') }
@@ -112,6 +147,7 @@ Deno.serve(async (request) => {
     p_lon: body.longitude ?? null,
   })
   if (error) {
+    if (error.code === 'PT503') return reply(503, 'maintenance_active')
     if (error.message.includes('rate limit exceeded')) return reply(429, 'rate_limited')
     if (error.message.includes('replayed request')) return reply(409, 'replayed_request')
     return reply(400, 'sighting_unavailable')

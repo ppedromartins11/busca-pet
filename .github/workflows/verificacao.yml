@@ -1,0 +1,39 @@
+name: Verificação do BuscaPet
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - docs/engenharia-software-semestre-2026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Sintaxe, testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependências a partir do lockfile
+        run: npm ci
+
+      - name: Verificar sintaxe
+        run: npm run check
+
+      - name: Executar testes locais
+        run: npm test
+
+      - name: Gerar build
+        run: npm run build

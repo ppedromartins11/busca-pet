@@ -2,7 +2,15 @@
 (() => {
   "use strict";
 
-  const app = window.BPSupabase?.configured ? window.BPRealApp : window.BPApp;
+  const configured = Boolean(window.BPSupabase?.configured);
+  const root = document.querySelector("#main-content");
+  if (!configured && import.meta.env.PROD) {
+    document.title = "BuscaPet | Ambiente não configurado";
+    root.innerHTML = `<section class="environment-block" role="alert" aria-labelledby="environment-block-title"><div class="environment-block__icon" aria-hidden="true">!</div><div><p class="environment-block__eyebrow">Ambiente indisponível</p><h1 id="environment-block-title">O BuscaPet ainda não está conectado</h1><p>Este endereço precisa ser configurado para acessar o serviço de dados. Nenhum dado local de demonstração foi carregado.</p></div></section>`;
+    return;
+  }
+
+  const app = configured ? window.BPRealApp : window.BPApp;
   const responsiveQuery = window.matchMedia?.("(min-width: 1024px)");
 
   app.mount();

@@ -1,5 +1,5 @@
 /* Interface conectada: dados reais via publishable key, Auth e RLS. */
-import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META } from "./search-map.js";
+import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-map.js";
 
 (() => {
   "use strict";
@@ -15,6 +15,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
+  let homeFocusTarget = "";
   let photos = [];
   let lastDialogFocus = null;
   let notice = "";
@@ -24,7 +25,6 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   let pointPicker = null;
   let selectedPoint = null;
   let removeExistingPoint = false;
-  let mapMode = "real";
   let mapFilters = { "last-known": true, sighting: true, support: true, partner: true };
   let mapPoints = [];
   let mapOccurrenceId = "";
@@ -138,7 +138,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     else location.hash = hash;
   }
   function mount() {
-    root.innerHTML = `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><nav class="main-nav" aria-label="Navegação principal" id="real-nav"></nav><div class="header-actions" id="real-header-actions"></div><button class="menu-toggle" type="button" aria-controls="real-mobile-nav" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button><nav class="mobile-nav" id="real-mobile-nav" aria-label="Menu móvel" hidden></nav></header><div class="demo-strip"><span>MVP acadêmico conectado · dados reais no Supabase · use somente dados autorizados</span></div><div id="real-toast" class="toast" role="status" aria-live="polite"></div><section id="real-screen" class="screen current" aria-live="off"></section><dialog id="real-dialog" class="dialog"></dialog>`;
+    root.innerHTML = `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><nav class="main-nav" aria-label="Navegação principal" id="real-nav"></nav><div class="header-actions" id="real-header-actions"></div><button class="menu-toggle" type="button" aria-controls="real-mobile-nav" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button><nav class="mobile-nav" id="real-mobile-nav" aria-label="Menu móvel" hidden></nav></header><div class="demo-strip"><span>Ambiente de homologação · use somente dados e imagens autorizados</span></div><div id="real-toast" class="toast" role="status" aria-live="polite"></div><section id="real-screen" class="screen current" aria-live="off"></section><dialog id="real-dialog" class="dialog"></dialog>`;
     document.querySelector("#real-dialog").addEventListener("close", () => lastDialogFocus?.focus());
     window.matchMedia("(min-width: 1200px)").addEventListener("change", (event) => { if (event.matches) closeMobileMenu(); });
   }
@@ -187,47 +187,6 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const meta = MAP_CATEGORY_META[category];
     return `<label class="map-filter"><input type="checkbox" data-map-filter="${category}" ${mapFilters[category] ? "checked" : ""}><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><span>${meta.label}</span></label>`;
   }
-  function mapPointItem(point, index) {
-    const meta = MAP_CATEGORY_META[point.category];
-    return `<li><button type="button" class="map-point-item" data-action="focus-map-point" data-id="${esc(point.id)}"><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><span><b>${esc(index ? point.title : "Última região conhecida")}</b><small>${esc(point.region)}${point.time ? ` · ${esc(point.time)}` : ""}</small></span></button></li>`;
-  }
-  function supportPointItem(point) {
-    const meta = MAP_CATEGORY_META[point.category];
-    return `<article><span class="map-filter-symbol ${meta.className}" aria-hidden="true">${meta.symbol}</span><div><h3>${esc(point.title)}</h3><p>${esc(point.region)}</p><small>${esc(meta.label)} · ${esc(point.state)}</small><p>${esc(point.description)}</p></div></article>`;
-  }
-  function legacyCombinedMapPage() {
-    destroyMap();
-    const points = mapMode === "demo" ? DEMO_MAP_POINTS : [];
-    const timeline = points.filter((point) => point.category === "last-known" || point.category === "sighting");
-    const support = points.filter((point) => point.category === "support" || point.category === "partner");
-    setPage(shell("Mapa e rede de apoio", "Consulte somente localizações aproximadas explicitamente autorizadas.", `<section class="map-academic-notice" role="note"><b>SIMULAÇÃO ACADÊMICA</b><span>Os pontos exibidos no cenário demonstrativo são fictícios e servem exclusivamente para demonstrar a funcionalidade.</span></section><div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados reais disponíveis</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Cenário demonstrativo</button></div>${mapMode === "real" ? '<p class="notice">Não há coordenadas públicas autorizadas para exibir no momento. A lista textual permanece vazia para evitar inferir localizações a partir de dados privados.</p>' : '<p class="notice">Modo demonstração ativo: nenhum ponto abaixo foi carregado do Supabase, do feed público ou das estatísticas reais.</p>'}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${Object.keys(MAP_CATEGORY_META).map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de pontos aproximados"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A posição do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline" aria-labelledby="map-timeline-heading"><h2 id="map-timeline-heading">Linha do tempo${mapMode === "demo" ? " demonstrativa" : ""}</h2>${timeline.length ? `<ol>${timeline.map(mapPointItem).join("")}</ol>` : '<p>Nenhum ponto público autorizado para esta linha do tempo.</p>'}</aside></div><section class="map-text-list" aria-labelledby="map-points-heading"><h2 id="map-points-heading">Lista textual dos pontos</h2>${points.length ? `<ul>${points.map((point) => `<li><b>${esc(MAP_CATEGORY_META[point.category].label)}:</b> ${esc(point.title)} — ${esc(point.region)}${point.time ? ` (${esc(point.time)})` : ""}. ${esc(point.state)}.</li>`).join("")}</ul>` : '<p>Nenhum ponto geográfico real pode ser mostrado sem autorização pública.</p>'}</section><section class="map-support" aria-labelledby="map-support-heading"><h2 id="map-support-heading">Rede de apoio${mapMode === "demo" ? " demonstrativa" : ""}</h2>${support.length ? `<div>${support.map(supportPointItem).join("")}</div>` : '<p>Quando houver colaboradores ou parceiros autorizados para divulgação, eles aparecerão aqui com região aproximada e contato verificado.</p>'}</section>`, false), "Mapa e rede de apoio");
-    const target = document.querySelector("#search-map");
-    if (!target) return;
-    mapController = createSearchMap(target, { onTilesError: () => {
-      const status = document.querySelector("#map-tiles-status");
-      if (status) status.textContent = "Não foi possível carregar o fundo do mapa. A lista textual de pontos continua disponível.";
-    } });
-    mapController.setPoints(points, mapFilters);
-    requestAnimationFrame(() => mapController?.invalidateSize());
-  }
-  // The map intentionally has a separate experience from the support directory.
-  // This declaration supersedes the legacy combined renderer above while retaining
-  // its implementation in the file for a safe, incremental migration.
-  function mapPage() {
-    destroyMap();
-    const points = mapMode === "demo" ? DEMO_MAP_POINTS.filter((point) =>
-      point.category === "last-known" || point.category === "sighting") : [];
-    const timeline = points.filter((point) => point.category === "last-known" || point.category === "sighting");
-    setPage(shell("Mapa da busca", "Acompanhe avistamentos e descubra onde concentrar as buscas.", `${mapMode === "demo" ? '<p class="demo-disclaimer" role="note">Exemplo ilustrativo — os pontos não representam avistamentos reais.</p>' : ""}<div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados da busca</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Ver exemplo ilustrativo</button></div>${mapMode === "real" ? '<p class="notice">Ainda não há pontos registrados para esta busca.</p>' : ""}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${["last-known", "sighting"].map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de pontos aproximados"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A posição do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline" aria-labelledby="map-timeline-heading"><h2 id="map-timeline-heading">Linha do tempo</h2>${timeline.length ? `<ol>${timeline.map(mapPointItem).join("")}</ol>` : '<p>Ainda não há avistamentos para esta busca.</p>'}</aside></div><section class="map-text-list" aria-labelledby="map-points-heading"><h2 id="map-points-heading">Pontos da busca</h2>${points.length ? `<ul>${points.map((point) => `<li><b>${esc(MAP_CATEGORY_META[point.category].label)}:</b> ${esc(point.title)} — ${esc(point.region)}${point.time ? ` (${esc(point.time)})` : ""}.</li>`).join("")}</ul>` : '<p>Quando um ponto público for registrado, ele aparecerá aqui.</p>'}</section>`, false), "Mapa da busca");
-    const target = document.querySelector("#search-map");
-    if (!target) return;
-    mapController = createSearchMap(target, { onTilesError: () => {
-      const status = document.querySelector("#map-tiles-status");
-      if (status) status.textContent = "Não foi possível carregar o fundo do mapa. A lista textual de pontos continua disponível.";
-    } });
-    mapController.setPoints(points, mapFilters);
-    requestAnimationFrame(() => mapController?.invalidateSize());
-  }
   function asMapPoint(row) {
     return {
       id: row.id, category: row.category, occurrenceId: row.occurrence_id,
@@ -275,7 +234,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       status.textContent = `${mapPoints.length} ${mapPoints.length === 1 ? "ponto publicado" : "pontos publicados"}`;
     } catch (error) {
       if (request !== mapQueryGeneration || mapController !== controller) return;
-      status.textContent = error?.code === "PGRST202" || error?.code === "UNAVAILABLE"
+      status.textContent = error?.code === "NOT_PUBLISHED" || error?.code === "UNAVAILABLE"
         ? "Os pontos do mapa ainda não estão disponíveis. Tente novamente após a atualização do serviço."
         : fail(error);
       console.error("[BuscaPet][mapa]", { code: error?.code, status: error?.status, cause: error?.message });
@@ -284,10 +243,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   function realMapPage(occurrenceId = "") {
     destroyMap();
     mapOccurrenceId = UUID.test(occurrenceId) ? occurrenceId : "";
-    mapPoints = mapMode === "demo" ? DEMO_MAP_POINTS : [];
+    mapPoints = [];
     const lists = mapListHtml(mapPoints);
-    const filterFields = mapMode === "real" ? `<div class="map-search-fields"><label>Cidade<input class="control" id="map-city" maxlength="80" placeholder="Todas as cidades"></label><label>Região<input class="control" id="map-region" maxlength="100" placeholder="Todas as regiões"></label><label>Situação<select class="control" id="map-status-filter"><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label>Período<select class="control" id="map-period"><option value="">Qualquer data</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label></div><div class="actions"><button class="btn secondary" type="button" data-action="apply-map-filters">Aplicar filtros</button><button class="btn secondary" type="button" data-action="refresh-map">Atualizar pontos</button></div>` : "";
-    setPage(shell("Mapa da busca", "Acompanhe avistamentos e descubra onde concentrar as buscas.", `${mapOccurrenceId ? `<p><a class="back-link" href="${url("pet", mapOccurrenceId)}">‹ Voltar ao alerta</a></p>` : ""}${mapMode === "demo" ? '<p class="demo-disclaimer" role="note">Exemplo ilustrativo — os pontos não representam avistamentos reais.</p>' : ""}<div class="map-mode" role="group" aria-label="Fonte de dados do mapa"><button class="btn ${mapMode === "real" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="real" aria-pressed="${mapMode === "real"}">Dados da busca</button><button class="btn ${mapMode === "demo" ? "primary" : "secondary"}" type="button" data-action="map-mode" data-mode="demo" aria-pressed="${mapMode === "demo"}">Ver exemplo ilustrativo</button></div>${filterFields}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${Object.keys(MAP_CATEGORY_META).map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-results-status" class="hint" role="status" aria-live="polite"></p><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de regiões aproximadas"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A localização do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline"><h2>Linha do tempo</h2><div id="map-timeline-events">${lists.timeline}</div></aside></div><section class="map-text-list"><h2>Pontos da busca</h2><div id="map-text-points">${lists.list}</div></section>`, false), "Mapa da busca");
+    const filterFields = `<div class="map-search-fields"><label>Cidade<input class="control" id="map-city" maxlength="80" placeholder="Todas as cidades"></label><label>Região<input class="control" id="map-region" maxlength="100" placeholder="Todas as regiões"></label><label>Situação<select class="control" id="map-status-filter"><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label>Período<select class="control" id="map-period"><option value="">Qualquer data</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label></div><div class="actions"><button class="btn secondary" type="button" data-action="apply-map-filters">Aplicar filtros</button><button class="btn secondary" type="button" data-action="refresh-map">Atualizar pontos</button></div>`;
+    setPage(shell("Mapa da busca", "Acompanhe avistamentos e descubra onde concentrar as buscas.", `${mapOccurrenceId ? `<p><a class="back-link" href="${url("pet", mapOccurrenceId)}">‹ Voltar ao alerta</a></p>` : ""}${filterFields}<div class="map-controls"><fieldset><legend>Mostrar no mapa</legend><div>${["last-known", "sighting"].map(mapFilterControl).join("")}</div></fieldset><button class="btn secondary" type="button" data-action="use-location">${icon("pin")}Usar minha localização</button></div><p id="map-results-status" class="hint" role="status" aria-live="polite"></p><p id="map-tiles-status" class="hint" role="status" aria-live="polite"></p><div class="map-layout"><div><div id="search-map" class="search-map" role="application" aria-label="Mapa interativo de regiões aproximadas"></div><p class="map-attribution-note">Mapa © OpenStreetMap contributors. A localização do seu dispositivo não é salva nem publicada.</p></div><aside class="map-timeline"><h2>Linha do tempo</h2><div id="map-timeline-events">${lists.timeline}</div></aside></div><section class="map-text-list"><h2>Pontos da busca</h2><div id="map-text-points">${lists.list}</div></section>`, false), "Mapa da busca");
     const target = document.querySelector("#search-map");
     mapController = createSearchMap(target, { onTilesError: () => {
       const status = document.querySelector("#map-tiles-status");
@@ -295,7 +254,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     } });
     mapController.setPoints(mapPoints, mapFilters);
     requestAnimationFrame(() => mapController?.invalidateSize());
-    if (mapMode === "real") void loadRealMapPoints();
+    void loadRealMapPoints();
   }
   function servicesPage() {
     destroyMap();
@@ -327,7 +286,13 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     requestAnimationFrame(() => pointPicker?.invalidateSize());
   }
   function alertCard(item) {
-    return `<article class="pet"><div class="photo" data-alert-photo="${esc(item.id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto disponível</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${types[item.type]}</span><span class="tag">${states[item.status] || "Situação indisponível"}</span></div><h3>${types[item.type]}</h3><p class="pet-description">${esc(item.description)}</p><p class="pet-location">${icon("pin")} ${esc(item.region)}<span>${esc(item.city)}</span></p>${item.public_reference ? `<p class="hint">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>${fmtDate(item.last_seen_at)}</span></div><div class="card-footer"><span>Alerta da comunidade</span><b>Ver alerta</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${types[item.type]} em ${esc(item.city)}"></a></article>`;
+    const type = types[item.type] || "Alerta da comunidade";
+    const status = states[item.status] || "Situação indisponível";
+    const location = [item.region, item.city].filter(Boolean).join(", ") || "Região não informada";
+    const searchable = [type, status, item.city, item.region, item.public_reference, item.description]
+      .filter((value) => typeof value === "string" && value.trim())
+      .join(" ").toLocaleLowerCase("pt-BR");
+    return `<article class="pet occurrence-card" data-occurrence-card data-search="${esc(searchable)}"><div class="photo" data-alert-photo="${esc(item.id)}" aria-busy="true"><span class="photo-placeholder">${icon("paw")}<small>Carregando foto autorizada</small></span></div><div class="pet-body"><div class="card-tags"><span class="tag ${item.type === "found" ? "found" : ""}">${esc(type)}</span><span class="tag occurrence-status">${esc(status)}</span></div><p class="card-kicker">Alerta da comunidade</p><h3>${esc(type)} <span>em ${esc(item.city || "região informada")}</span></h3><p class="pet-description">${esc(item.description || "Sem descrição pública adicional.")}</p><p class="pet-location">${icon("pin")} ${esc(location)}<span>Localização aproximada</span></p>${item.public_reference ? `<p class="card-reference">${esc(item.public_reference)}</p>` : ""}<div class="card-bottom"><span>Visto em</span><time datetime="${esc(item.last_seen_at || "")}">${fmtDate(item.last_seen_at)}</time></div><div class="card-footer"><span>Detalhes e avistamentos</span><b aria-hidden="true">Ver alerta →</b></div></div><a class="card-link" href="${url("pet", item.id)}" aria-label="Ver ${esc(type).toLocaleLowerCase("pt-BR")} em ${esc(location)}"></a></article>`;
   }
   function photoDiagnostic(phase, photo, error = null) {
     console.error("[BuscaPet][foto]", {
@@ -339,18 +304,24 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     });
   }
   function alertPhotoPlaceholder(target, text) {
+    target.removeAttribute("aria-busy");
     target.innerHTML = `<span class="photo-placeholder">${icon("paw")}<small>${esc(text)}</small></span>`;
   }
   async function showAlertPhotos(rows, ticket) {
     if (!rows.length) return;
     let metadata;
     try { metadata = await D.listPublicCoverPhotos(rows.map((row) => row.id)); }
-    catch (error) { photoDiagnostic("metadata", null, error); return; }
+    catch (error) {
+      photoDiagnostic("metadata", null, error);
+      document.querySelectorAll("[data-alert-photo]").forEach((target) => alertPhotoPlaceholder(target, "Foto indisponível"));
+      return;
+    }
     const covers = new Map();
     for (const photo of metadata) if (!covers.has(photo.occurrence_id)) covers.set(photo.occurrence_id, photo);
     const targets = [...document.querySelectorAll("[data-alert-photo]")]
-      .map((target) => ({ target, photo: covers.get(target.dataset.alertPhoto) }))
-      .filter(({ photo }) => photo);
+      .map((target) => ({ target, photo: covers.get(target.dataset.alertPhoto) }));
+    for (const { target, photo } of targets) if (!photo) alertPhotoPlaceholder(target, "Foto não informada");
+    const queuedTargets = targets.filter(({ photo }) => photo);
     const queue = [];
     let active = 0;
     const next = () => {
@@ -367,7 +338,10 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
             image.alt = "Foto do alerta de animal";
             image.loading = "lazy";
             image.decoding = "async";
-            image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
+            image.addEventListener("load", () => {
+              image.classList.add("is-loaded");
+              target.removeAttribute("aria-busy");
+            }, { once: true });
             image.addEventListener("error", () => {
               discardPhoto(source);
               photoDiagnostic("decode", photo, Error("O navegador não conseguiu decodificar a imagem."));
@@ -393,8 +367,8 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       queue.push(entry);
       next();
     };
-    if (!("IntersectionObserver" in window)) { targets.forEach(enqueue); return; }
-    const targetRecords = new Map(targets.map((entry) => [entry.target, entry]));
+    if (!("IntersectionObserver" in window)) { queuedTargets.forEach(enqueue); return; }
+    const targetRecords = new Map(queuedTargets.map((entry) => [entry.target, entry]));
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) if (entry.isIntersecting) {
         observer.unobserve(entry.target);
@@ -402,25 +376,62 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         if (record) enqueue(record);
       }
     }, { rootMargin: "600px 0px" });
-    targets.forEach((entry) => observer.observe(entry.target));
+    queuedTargets.forEach((entry) => observer.observe(entry.target));
+  }
+  function resultCountText(count) {
+    return `${count} ${count === 1 ? "alerta encontrado" : "alertas encontrados"}`;
+  }
+  function homeTypeChip(value, label, disabled) {
+    const selected = filters.type === value;
+    return `<button class="filter-chip ${selected ? "is-active" : ""}" type="button" data-action="home-type-filter" data-type="${value}" aria-pressed="${selected}" ${disabled ? "disabled" : ""}>${label}</button>`;
+  }
+  function homeContent({ phase = "ready", rows = [], error = null } = {}) {
+    const ready = phase === "ready";
+    const term = filters.query.trim().toLocaleLowerCase("pt-BR");
+    const shown = ready ? rows.filter((row) => (!filters.type || row.type === filters.type)
+      && (!filters.status || row.status === filters.status)
+      && (!term || [row.city, row.region, row.public_reference, row.description]
+        .some((value) => String(value || "").toLocaleLowerCase("pt-BR").includes(term)))) : [];
+    const hasFilters = Boolean(filters.query || filters.type || filters.status);
+    const controlsDisabled = !ready;
+    const contractUnavailable = error?.code === "NOT_PUBLISHED";
+    const resultMarkup = phase === "loading"
+      ? `<section class="home-results-state" aria-busy="true" role="status"><span class="loading-dot" aria-hidden="true"></span><div><h3>Carregando alertas autorizados</h3><p>Estamos preparando os dados públicos da comunidade.</p></div></section>`
+      : phase === "error"
+        ? `<section class="home-results-state is-error" role="alert"><div><h3>${contractUnavailable ? "Consulta pública ainda não publicada" : "Não foi possível carregar os alertas"}</h3><p>${contractUnavailable ? "O contrato de dados dos alertas públicos ainda não está disponível neste ambiente. Nenhum dado de demonstração foi exibido." : esc(fail(error))}</p></div><button class="btn primary" type="button" data-action="retry">Tentar novamente</button></section>`
+        : shown.length
+          ? `<div class="list alert-grid" id="real-results">${shown.map(alertCard).join("")}</div><section class="empty home-client-empty" id="home-client-empty" role="status" hidden><h3>Nenhum alerta corresponde a esta busca.</h3><p>Confira os termos pesquisados ou limpe os filtros para ver todos os alertas autorizados.</p></section>`
+          : `<section class="empty home-empty" role="status"><h3>${hasFilters ? "Nenhum alerta corresponde aos filtros" : "Ainda não há alertas públicos"}</h3><p>${hasFilters ? "Ajuste a busca, o tipo ou a situação para tentar novamente." : "Quando houver uma ocorrência autorizada para publicação, ela aparecerá aqui."}</p>${hasFilters ? '<button class="btn secondary" type="button" data-action="clear-home-filters">Limpar filtros</button>' : ""}</section>`;
+    const resultContext = `${filters.type ? types[filters.type] : "Todos os tipos"}${filters.status ? ` · ${states[filters.status]}` : ""}`;
+    return {
+      shown,
+      markup: `<div class="page catalog-page home-page"><section class="search-hero home-hero" aria-labelledby="home-hero-title"><div class="hero-copy"><p class="eyebrow">Busca colaborativa e segura</p><h1 id="home-hero-title">Vamos trazer seu pet de volta.</h1><p>Encontre alertas públicos, compartilhe pistas responsáveis e ajude a reunir famílias.</p><label class="hero-search-field" for="real-query">${icon("search")}<span class="sr-only">Buscar alertas por cidade, região, referência ou descrição</span><input id="real-query" value="${esc(filters.query)}" placeholder="Cidade, região, referência ou descrição" aria-describedby="home-search-help" ${controlsDisabled ? "disabled" : ""}></label><p class="hero-search-help" id="home-search-help">A busca consulta apenas informações públicas autorizadas.</p><div class="hero-actions"><a class="btn primary" href="#publicar/lost">${icon("paw")} Meu pet sumiu</a><a class="btn secondary" href="#publicar/found">Encontrei um pet</a></div></div><figure class="hero-pet"><img src="assets/hex.png" alt="Hex, cão ilustrativo do BuscaPet"><figcaption>${icon("pin")}<span><b>Cada pista tem um lugar.</b><small>A localização exibida é sempre aproximada.</small></span></figcaption></figure></section><section class="catalog-section" aria-labelledby="community-alerts-title"><header class="catalog-heading"><div><p class="eyebrow">Alertas da comunidade</p><h2 id="community-alerts-title">Encontre uma forma de ajudar hoje</h2><p>Filtre ocorrências por informações públicas e registre avistamentos pelo alerta.</p></div><button class="btn plain small clear-filters" type="button" data-action="clear-home-filters" ${hasFilters ? "" : "hidden"}>Limpar filtros</button></header><div class="browse-layout"><aside class="browse-sidebar" aria-label="Refinar alertas"><div class="filter-heading"><h3>Refine a busca</h3><p>Use somente os filtros disponíveis para os alertas públicos.</p></div><div class="filter-group" role="group" aria-label="Filtrar por tipo de alerta"><span class="filter-label">Tipo de alerta</span><div class="filter-chips">${homeTypeChip("", "Todos", controlsDisabled)}${homeTypeChip("lost", "Desaparecidos", controlsDisabled)}${homeTypeChip("found", "Encontrados", controlsDisabled)}</div></div><div class="filter-controls"><label for="real-status">Situação<select id="real-status" ${controlsDisabled ? "disabled" : ""}><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}" ${filters.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></label></div><div class="support-note"><b>Quer ajudar na busca?</b><p>Abra um alerta para ver a região aproximada e registrar uma pista com segurança.</p><a href="#services">Conhecer a rede de apoio</a></div></aside><div class="browse-results" aria-busy="${phase === "loading"}"><div class="catalog-toolbar"><div><p class="results-kicker">Resultados</p><p id="real-result-count" role="status" aria-live="polite">${ready ? resultCountText(shown.length) : phase === "error" ? "Alertas indisponíveis" : "Consultando alertas autorizados"}</p></div>${ready ? `<p class="results-context">${resultContext}</p>` : ""}</div>${resultMarkup}</div></div></section></div>`,
+    };
   }
   async function home(ticket) {
-    const rows = await D.listPublicOccurrences();
-    if (ticket !== generation) return;
-    const term = filters.query.trim().toLocaleLowerCase("pt-BR");
-    const shown = rows.filter((row) => (!filters.type || row.type === filters.type)
-      && (!filters.status || row.status === filters.status)
-      && (!term || [row.city, row.region, row.public_reference, row.description].some((value) => String(value || "").toLocaleLowerCase("pt-BR").includes(term))));
-    setPage(`<div class="page catalog-page"><div class="search-hero"><div class="hero-copy"><h1>Vamos trazer seu pet de volta.</h1><p>Reúna as pistas. Organize a busca.<br>Conte com quem está por perto.</p><div class="hero-actions"><a class="btn primary" href="#publicar/lost">${icon("paw")} Meu pet sumiu</a><a class="btn secondary" href="#publicar/found">Encontrei um pet</a></div></div><figure class="hero-pet"><img src="assets/hex.png" alt="Hex, cão ilustrativo do projeto"><figcaption>${icon("pin")}<span><b>Cada pista tem um lugar.</b><small>Imagem ilustrativa</small></span></figcaption></figure></div><div class="catalog-heading"><div><h2>Alertas da comunidade</h2><p>Consulte a região e registre uma pista se tiver uma conta.</p></div></div><div class="browse-layout"><aside class="browse-sidebar" aria-label="Busca e filtros"><label class="search">${icon("search")}<span class="sr-only">Buscar alertas</span><input id="real-query" value="${esc(filters.query)}" placeholder="Cidade, região ou descrição"></label><div class="filter-controls"><label>Tipo<select id="real-type"><option value="">Todos</option><option value="lost" ${filters.type === "lost" ? "selected" : ""}>Desaparecidos</option><option value="found" ${filters.type === "found" ? "selected" : ""}>Encontrados</option></select></label><label>Situação<select id="real-status"><option value="">Todas</option>${Object.entries(states).map(([v, label]) => `<option value="${v}" ${filters.status === v ? "selected" : ""}>${label}</option>`).join("")}</select></label></div></aside><div class="browse-results"><p id="real-result-count" role="status" aria-live="polite">${shown.length} ${shown.length === 1 ? "alerta encontrado" : "alertas encontrados"}</p><div class="list alert-grid" id="real-results">${shown.length ? shown.map(alertCard).join("") : empty("Nenhum alerta encontrado", "Altere os filtros ou publique o primeiro alerta.")}</div></div></div></div>`, "Alertas");
-    document.querySelector("#real-query")?.setSelectionRange?.(filters.query.length, filters.query.length);
-    void showAlertPhotos(shown, ticket);
+    setPage(homeContent({ phase: "loading" }).markup, "Alertas");
+    try {
+      const rows = await D.listPublicOccurrences();
+      if (ticket !== generation) return;
+      const content = homeContent({ rows });
+      setPage(content.markup, "Alertas");
+      const search = document.querySelector("#real-query");
+      if (homeFocusTarget) {
+        document.querySelector(homeFocusTarget)?.focus();
+        homeFocusTarget = "";
+      } else search?.setSelectionRange?.(filters.query.length, filters.query.length);
+      void showAlertPhotos(content.shown, ticket);
+    } catch (error) {
+      if (ticket !== generation) return;
+      setPage(homeContent({ phase: "error", error }).markup, "Alertas");
+    }
   }
   async function detail(id, ticket) {
     if (!UUID.test(id)) return unavailable("Alerta indisponível");
     const row = await D.getOccurrence(id);
     if (ticket !== generation) return;
     if (!row) return unavailable("Alerta indisponível");
-    const mine = row.reporter_id === user()?.id;
+    const mine = row.is_owner === true;
     const canReport = row.status === "active" && row.visibility === "public" && !mine;
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
     const reportLink = canReport
@@ -451,9 +462,19 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     ]);
     if (ticket !== generation) return;
     if (!occurrence || occurrence.visibility !== "public"
-      || occurrence.status !== "active" || occurrence.reporter_id === user()?.id) {
+      || occurrence.status !== "active" || occurrence.is_owner === true) {
       return unavailable("Este alerta não está disponível para denúncia");
     }
+    const occurrenceType = types[occurrence.type] || "Tipo do alerta indisponível";
+    const publicLocation = [occurrence.city, occurrence.region]
+      .filter((value) => typeof value === "string" && value.trim())
+      .map((value) => esc(value.trim())).join(" · ") || "Cidade e região aproximada indisponíveis.";
+    const publicReference = typeof occurrence.public_reference === "string"
+      && occurrence.public_reference.trim()
+      ? esc(occurrence.public_reference.trim()) : "Sem referência pública adicional.";
+    const publicDescription = typeof occurrence.description === "string"
+      && occurrence.description.trim()
+      ? esc(occurrence.description.trim()) : "Descrição pública indisponível.";
     const activeReport = existing && reportStatuses[existing.report_status]
       ? `<div class="notice" role="status"><strong>Você já enviou uma denúncia ativa</strong><p>Situação: ${esc(reportStatuses[existing.report_status])}. O envio repetido não cria outro protocolo.</p></div><a class="btn secondary" href="${url("pet", id)}">Voltar ao alerta</a>`
       : `<form class="form" id="real-occurrence-report-form" data-id="${esc(id)}">
@@ -464,7 +485,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
           <p class="hint">A denúncia será analisada pela equipe. Ela não oculta o alerta automaticamente.</p>
           <button class="btn primary" type="submit">Enviar denúncia</button>
         </form>`;
-    setPage(shell("Denunciar alerta", "Informe o que merece atenção. A denúncia será encaminhada à equipe de moderação.", `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><section class="narrow report-form-page"><div class="notice"><strong>${esc(occurrence.city)} · ${esc(occurrence.region)}</strong><p>Protocolo do alerta: <code>${esc(id)}</code>. O autor da publicação não verá sua identidade.</p></div>${activeReport}</section>`, true), "Denunciar alerta");
+    setPage(shell("Denunciar alerta", "Informe o que merece atenção. A denúncia será encaminhada à equipe de moderação.", `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><section class="narrow report-form-page"><article class="report-occurrence-summary" aria-labelledby="report-occurrence-summary-title"><h2 id="report-occurrence-summary-title">${esc(occurrenceType)}</h2><dl><div><dt>Cidade / região pública aproximada</dt><dd>${publicLocation}</dd></div><div><dt>Referência pública</dt><dd>${publicReference}</dd></div></dl><section class="report-occurrence-description" aria-label="Descrição pública do alerta"><h3>Descrição do alerta</h3><p>${publicDescription}</p></section><p class="report-occurrence-id"><span>Identificador técnico do alerta</span><code>${esc(id)}</code></p><p class="report-confidentiality"><strong>Confidencialidade:</strong> a pessoa que publicou este alerta não verá sua identidade.</p></article>${activeReport}</section>`, true), "Denunciar alerta");
   }
   async function showPhotos(id, ticket) {
     try {
@@ -561,7 +582,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
   async function occurrenceForm(id, type, ticket) {
     const [pets, row] = await Promise.all([D.listOwnPets(), id ? D.getOccurrence(id) : Promise.resolve(null)]);
     if (ticket !== generation) return;
-    if (id && (!row || row.reporter_id !== user()?.id)) return unavailable("Alerta indisponível");
+    if (id && (!row || row.is_owner !== true)) return unavailable("Alerta indisponível");
     const kind = row?.type || (type === "found" ? "found" : "lost");
     setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Adicionar fotos cadastradas do meu animal a este alerta.</span></label><p class="hint full">A confirmação associa até cinco fotos do animal a este alerta. Elas só aparecem no feed se o alerta for público.</p><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
     const grid = document.querySelector("#real-occurrence-form .form-grid");
@@ -586,10 +607,19 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     }
   }
   async function dashboard(ticket) {
-    const [pets, occurrences] = await Promise.all([D.listOwnPets(), D.listOwnOccurrences()]);
+    const [petsResult, occurrencesResult] = await Promise.allSettled([D.listOwnPets(), D.listOwnOccurrences()]);
     if (ticket !== generation) return;
+    if (petsResult.status === "rejected") throw petsResult.reason;
+    if (occurrencesResult.status === "rejected" && occurrencesResult.reason?.code !== "NOT_PUBLISHED")
+      throw occurrencesResult.reason;
+    const pets = petsResult.value;
+    const occurrencesAvailable = occurrencesResult.status === "fulfilled";
+    const occurrences = occurrencesAvailable ? occurrencesResult.value : [];
     const active = occurrences.filter((row) => row.status === "active").length;
-    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrences.length}</b><span>Meus alertas</span></div><div><b>${active}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar.")}`), "Minha área");
+    const occurrencesMarkup = occurrencesAvailable
+      ? (occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar."))
+      : '<section class="notice warn" role="status"><strong>Meus alertas ainda não estão disponíveis neste ambiente.</strong><p>O contrato seguro de leitura da sua conta ainda não foi publicado. Seus dados não foram substituídos e nenhuma informação de outra conta foi consultada.</p><button class="btn secondary" type="button" data-action="retry">Tentar novamente</button></section>';
+    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
   }
   function metric(value) {
     const number = Number(value);
@@ -736,13 +766,26 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     </form>`;
     return adminFrame("occurrences", `<section class="admin-content" aria-labelledby="admin-occurrences-title"><div class="admin-content-heading"><h2 id="admin-occurrences-title">Moderação de ocorrências</h2><p>Consulte publicações visíveis e ocultas para análise. A fila não inclui registros privados nem localizações exatas.</p></div>${controls}<p id="admin-occurrence-results-status" class="hint" role="status" aria-live="polite">Carregando ocorrências…</p><div id="admin-occurrence-results" aria-live="polite" aria-busy="true"></div></section>`);
   }
+  function adminAnimalSummary(row) {
+    const name = typeof row?.pet_name === "string" ? row.pet_name.trim() : "";
+    return name || "Informações do animal indisponíveis";
+  }
+  function adminAnimalDetails(row) {
+    const name = typeof row?.pet_name === "string" ? row.pet_name.trim() : "";
+    const animalSpecies = row.pet_species
+      ? (species[row.pet_species] || row.pet_species) : "";
+    if (!name) return animalSpecies
+      ? `${adminAnimalSummary(row)} · espécie: ${animalSpecies}` : adminAnimalSummary(row);
+    const detailSpecies = animalSpecies || "Espécie não informada";
+    return `${name} · ${detailSpecies}`;
+  }
   function adminOccurrenceListMarkup(result) {
     const rows = result.occurrences || [];
     if (!rows.length) return `<div class="notice"><strong>${adminOccurrences.query || adminOccurrences.type || adminOccurrences.status || adminOccurrences.visibility || adminOccurrences.createdFrom || adminOccurrences.createdTo ? "Nenhuma ocorrência encontrada" : "Fila vazia"}</strong><p>Não há publicações disponíveis para os filtros selecionados.</p></div>`;
     const start = (adminOccurrences.page - 1) * adminOccurrences.pageSize + 1;
     const end = start + rows.length - 1;
     const pages = Math.max(1, Math.ceil(result.total / adminOccurrences.pageSize));
-    return `<div class="admin-occurrence-list">${rows.map((row) => `<article class="admin-occurrence-card"><div class="admin-occurrence-cover" data-admin-occurrence-photo="${esc(row.occurrence_id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto de capa</small></span></div><div class="admin-occurrence-copy"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.occurrence_visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.occurrence_visibility] || esc(row.occurrence_visibility)}</span></div><h3>${esc(row.pet_name || "Animal sem vínculo")} <span>· ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</span></h3><p>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</p><p class="admin-occurrence-description">${esc(row.description)}</p><small>Criada ${esc(fmtDate(row.created_at, true))} · Protocolo <code>${esc(row.occurrence_id)}</code></small><a class="btn secondary small" href="#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}">Analisar ocorrência</a></div></article>`).join("")}</div><nav class="admin-pagination" aria-label="Paginação de ocorrências"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page - 1}" ${adminOccurrences.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminOccurrences.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page + 1}" ${adminOccurrences.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+    return `<div class="admin-occurrence-list">${rows.map((row) => `<article class="admin-occurrence-card"><div class="admin-occurrence-cover" data-admin-occurrence-photo="${esc(row.occurrence_id)}"><span class="photo-placeholder">${icon("paw")}<small>Sem foto de capa</small></span></div><div class="admin-occurrence-copy"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.occurrence_visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.occurrence_visibility] || esc(row.occurrence_visibility)}</span></div><h3>${esc(adminAnimalSummary(row))} <span>· ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</span></h3><p>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</p><p class="admin-occurrence-description">${esc(row.description)}</p><small>Criada ${esc(fmtDate(row.created_at, true))} · Protocolo <code>${esc(row.occurrence_id)}</code></small><a class="btn secondary small" href="#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}">Analisar ocorrência</a></div></article>`).join("")}</div><nav class="admin-pagination" aria-label="Paginação de ocorrências"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page - 1}" ${adminOccurrences.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminOccurrences.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-occurrence-page" data-page="${adminOccurrences.page + 1}" ${adminOccurrences.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
   }
   async function showAdminOccurrenceCovers(rows, ticket) {
     const entries = rows.filter((row) => row.cover_photo_path);
@@ -807,7 +850,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       const actionNote = nextAction === "hide"
         ? "A publicação e suas fotos deixarão de aparecer no feed. O status de busca ou reencontro não será alterado."
         : "A publicação voltará a aparecer no feed. O status de busca ou reencontro não será alterado.";
-      setPage(adminFrame("occurrences", `<section class="admin-content admin-occurrence-detail"><p><a class="back-link" href="${backHref}">‹ Voltar à fila</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.visibility] || esc(row.visibility)}</span></div><h2 id="admin-occurrence-title">${esc(row.pet_name || "Animal sem vínculo")} · ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</h2><p>Protocolo <code>${esc(row.occurrence_id)}</code> · Criada ${esc(fmtDate(row.created_at, true))}</p></div><dl class="admin-user-details"><div><dt>Animal</dt><dd>${esc(row.pet_name || "Sem vínculo")} · ${esc(species[row.pet_species] || "Espécie não informada")}</dd></div><div><dt>Data do último registro</dt><dd>${esc(fmtDate(row.last_seen_at, true))}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</dd></div><div><dt>Visibilidade / situação</dt><dd>${moderationVisibility[row.visibility] || esc(row.visibility)} · ${moderationStatus[row.occurrence_status] || esc(row.occurrence_status)}</dd></div><div class="full"><dt>Descrição</dt><dd>${esc(row.description)}</dd></div>${row.pet_breed || row.pet_coat_description || row.pet_distinctive_features ? `<div class="full"><dt>Características informadas do animal</dt><dd>${[row.pet_breed, row.pet_coat_description, row.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><section class="admin-account-audit" aria-labelledby="admin-occurrence-photos-title"><h3 id="admin-occurrence-photos-title">Fotografias vinculadas</h3><div class="admin-occurrence-photos">${photosMarkup || '<p class="hint">Nenhuma foto vinculada a esta ocorrência.</p>'}</div></section><section class="admin-account-action" aria-labelledby="admin-occurrence-decision-title"><h3 id="admin-occurrence-decision-title">Registrar decisão</h3><p>${actionNote}</p><form id="admin-occurrence-moderation-form" data-id="${esc(row.occurrence_id)}" data-action-name="${nextAction}"><label for="admin-occurrence-reason">Justificativa obrigatória<textarea class="control" id="admin-occurrence-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-occurrence-reason-help"></textarea></label><span class="hint" id="admin-occurrence-reason-help">Informe de 10 a 500 caracteres. A decisão será registrada no histórico.</span><p class="form-error" role="alert"></p><button class="btn ${nextAction === "hide" ? "danger" : "primary"}" type="submit">${actionLabel}</button></form></section>${adminOccurrenceAuditMarkup(history)}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise de ocorrência");
+      setPage(adminFrame("occurrences", `<section class="admin-content admin-occurrence-detail"><p><a class="back-link" href="${backHref}">‹ Voltar à fila</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-tag ${row.occurrence_type === "lost" ? "lost" : "found"}">${row.occurrence_type === "lost" ? "Desaparecido" : "Encontrado"}</span><span class="admin-status ${row.visibility === "public" ? "active" : "suspended"}">${moderationVisibility[row.visibility] || esc(row.visibility)}</span></div><h2 id="admin-occurrence-title">${esc(adminAnimalSummary(row))} · ${esc(moderationStatus[row.occurrence_status] || row.occurrence_status)}</h2><p>Protocolo <code>${esc(row.occurrence_id)}</code> · Criada ${esc(fmtDate(row.created_at, true))}</p></div><dl class="admin-user-details"><div><dt>Animal</dt><dd>${esc(adminAnimalDetails(row))}</dd></div><div><dt>Data do último registro</dt><dd>${esc(fmtDate(row.last_seen_at, true))}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(row.city)} · ${esc(row.region)}${row.public_reference ? ` · ${esc(row.public_reference)}` : ""}</dd></div><div><dt>Visibilidade / situação</dt><dd>${moderationVisibility[row.visibility] || esc(row.visibility)} · ${moderationStatus[row.occurrence_status] || esc(row.occurrence_status)}</dd></div><div class="full"><dt>Descrição</dt><dd>${esc(row.description)}</dd></div>${row.pet_breed || row.pet_coat_description || row.pet_distinctive_features ? `<div class="full"><dt>Características informadas do animal</dt><dd>${[row.pet_breed, row.pet_coat_description, row.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><section class="admin-account-audit" aria-labelledby="admin-occurrence-photos-title"><h3 id="admin-occurrence-photos-title">Fotografias vinculadas</h3><div class="admin-occurrence-photos">${photosMarkup || '<p class="hint">Nenhuma foto vinculada a esta ocorrência.</p>'}</div></section><section class="admin-account-action" aria-labelledby="admin-occurrence-decision-title"><h3 id="admin-occurrence-decision-title">Registrar decisão</h3><p>${actionNote}</p><form id="admin-occurrence-moderation-form" data-id="${esc(row.occurrence_id)}" data-action-name="${nextAction}"><label for="admin-occurrence-reason">Justificativa obrigatória<textarea class="control" id="admin-occurrence-reason" name="reason" minlength="10" maxlength="500" required aria-describedby="admin-occurrence-reason-help"></textarea></label><span class="hint" id="admin-occurrence-reason-help">Informe de 10 a 500 caracteres. A decisão será registrada no histórico.</span><p class="form-error" role="alert"></p><button class="btn ${nextAction === "hide" ? "danger" : "primary"}" type="submit">${actionLabel}</button></form></section>${adminOccurrenceAuditMarkup(history)}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise de ocorrência");
       await Promise.all((row.photos || []).map(async (photo) => {
         const target = document.querySelector(`[data-admin-review-photo="${CSS.escape(photo.id)}"]`);
         if (!target) return;
@@ -865,7 +908,18 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     const start = (adminReports.page - 1) * adminReports.pageSize + 1;
     const end = start + rows.length - 1;
     const pages = Math.max(1, Math.ceil(result.total / adminReports.pageSize));
-    return `<div class="admin-report-list">${rows.map((row) => `<article class="admin-report-card"><header><div><span class="admin-report-category">${esc(reportCategories[row.category] || row.category)}</span><h3>${esc(row.pet_name || "Alerta relacionado")} · ${esc(reportStatuses[row.report_status] || row.report_status)}</h3><p>Denúncia <code>${esc(row.report_id)}</code></p></div><span class="admin-status ${row.report_status === "open" ? "suspended" : row.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[row.report_status] || row.report_status)}</span></header><p class="admin-report-description">${esc(row.description)}</p><dl><div><dt>Alerta</dt><dd>${esc(row.occurrence_id)}</dd></div><div><dt>Região aproximada</dt><dd>${row.city ? `${esc(row.city)} · ${esc(row.region || "")}` : "Indisponível"}</dd></div><div><dt>Enviada</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div></dl><a class="btn secondary small" href="#admin/denuncias/${encodeURIComponent(row.report_id)}">Analisar denúncia</a></article>`).join("")}</div><nav class="admin-pagination" aria-label="Paginação de denúncias"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page - 1}" ${adminReports.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminReports.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page + 1}" ${adminReports.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
+    return `<div class="admin-report-list">${rows.map((row) => {
+      const statusLabel = reportStatuses[row.report_status] || row.report_status;
+      const occurrenceLabel = types[row.occurrence_type]
+        ? `Alerta: ${types[row.occurrence_type].toLocaleLowerCase("pt-BR")}`
+        : "Alerta sem contexto público disponível";
+      const subjectLabel = row.pet_name
+        ? row.pet_name
+        : row.occurrence_type ? occurrenceLabel : "Alerta sem contexto público disponível";
+      const animal = `<p class="admin-report-animal">Animal: ${esc(adminAnimalDetails(row))}</p>`;
+      const region = [row.city, row.region, row.public_reference].filter(Boolean).map(esc).join(" · ") || "Indisponível";
+      return `<article class="admin-report-card"><header><div><span class="admin-report-category">Motivo: ${esc(reportCategories[row.category] || row.category)}</span><h3>${esc(subjectLabel)}</h3>${animal}<p class="admin-report-identifiers"><span>Protocolo da denúncia</span> <code>${esc(row.report_id)}</code></p></div><span class="admin-status ${row.report_status === "open" ? "suspended" : row.report_status === "resolved" ? "active" : ""}">${esc(statusLabel)}</span></header><p class="admin-report-description"><strong>Descrição:</strong> ${esc(row.description)}</p><dl><div><dt>Situação da denúncia</dt><dd>${esc(statusLabel)}</dd></div><div><dt>Tipo do alerta</dt><dd>${esc(types[row.occurrence_type] || "Indisponível")}</dd></div><div><dt>Identificador do alerta</dt><dd class="admin-report-secondary-id"><code>${esc(row.occurrence_id)}</code></dd></div><div><dt>Região pública aproximada</dt><dd>${region}</dd></div><div><dt>Enviada</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div></dl><a class="btn secondary small" href="#admin/denuncias/${encodeURIComponent(row.report_id)}">Analisar denúncia</a></article>`;
+    }).join("")}</div><nav class="admin-pagination" aria-label="Paginação de denúncias"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page - 1}" ${adminReports.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminReports.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-report-page" data-page="${adminReports.page + 1}" ${adminReports.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
   }
   async function loadAdminReports(ticket = generation) {
     const request = ++adminReports.request;
@@ -921,7 +975,7 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       }
       const occurrenceHref = `#admin/ocorrencias/${encodeURIComponent(report.occurrence_id)}${routeInfo().source === "moderacao" ? "?from=moderacao" : ""}`;
       const occurrenceMarkup = occurrenceAvailable
-        ? `<dl class="admin-user-details"><div><dt>Identificador do alerta</dt><dd><code>${esc(report.occurrence_id)}</code></dd></div><div><dt>Animal</dt><dd>${esc(report.pet_name || "Sem vínculo")} · ${esc(species[report.pet_species] || "Espécie não informada")}</dd></div><div><dt>Tipo / situação</dt><dd>${esc(types[report.occurrence_type] || "Indisponível")} · ${esc(states[report.occurrence_status] || "Indisponível")}</dd></div><div><dt>Visibilidade</dt><dd>${esc(report.occurrence_visibility === "under_review" ? "Em análise de moderação" : "Pública")}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(report.city)} · ${esc(report.region)}${report.public_reference ? ` · ${esc(report.public_reference)}` : ""}</dd></div><div><dt>Último registro</dt><dd>${esc(fmtDate(report.last_seen_at, true))}</dd></div><div class="full"><dt>Descrição pública do alerta</dt><dd>${esc(report.occurrence_description)}</dd></div>${report.pet_breed || report.pet_coat_description || report.pet_distinctive_features ? `<div class="full"><dt>Características públicas do animal</dt><dd>${[report.pet_breed, report.pet_coat_description, report.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><p><a class="btn secondary" href="${occurrenceHref}">Abrir moderação do alerta e fotografias autorizadas</a></p>`
+        ? `<dl class="admin-user-details"><div><dt>Identificador do alerta</dt><dd><code>${esc(report.occurrence_id)}</code></dd></div><div><dt>Animal</dt><dd>${esc(adminAnimalDetails(report))}</dd></div><div><dt>Tipo / situação</dt><dd>${esc(types[report.occurrence_type] || "Indisponível")} · ${esc(states[report.occurrence_status] || "Indisponível")}</dd></div><div><dt>Visibilidade</dt><dd>${esc(report.occurrence_visibility === "under_review" ? "Em análise de moderação" : "Pública")}</dd></div><div><dt>Região pública aproximada</dt><dd>${esc(report.city)} · ${esc(report.region)}${report.public_reference ? ` · ${esc(report.public_reference)}` : ""}</dd></div><div><dt>Último registro</dt><dd>${esc(fmtDate(report.last_seen_at, true))}</dd></div><div class="full"><dt>Descrição pública do alerta</dt><dd>${esc(report.occurrence_description)}</dd></div>${report.pet_breed || report.pet_coat_description || report.pet_distinctive_features ? `<div class="full"><dt>Características públicas do animal</dt><dd>${[report.pet_breed, report.pet_coat_description, report.pet_distinctive_features].filter(Boolean).map(esc).join(" · ")}</dd></div>` : ""}</dl><p><a class="btn secondary" href="${occurrenceHref}">Abrir moderação do alerta e fotografias autorizadas</a></p>`
         : `<div class="notice"><strong>Conteúdo do alerta indisponível</strong><p>A visibilidade atual não permite consultar o conteúdo ou as fotografias por esta análise.</p><code>${esc(report.occurrence_id)}</code></div>`;
       setPage(adminFrame("reports", `<section class="admin-content admin-report-detail"><p><a class="back-link" href="${backHref}">‹ Voltar à fila de denúncias</a></p><div class="admin-content-heading"><div class="admin-occurrence-meta"><span class="admin-report-category">${esc(reportCategories[report.category] || report.category)}</span><span class="admin-status ${report.report_status === "open" ? "suspended" : report.report_status === "resolved" ? "active" : ""}">${esc(reportStatuses[report.report_status] || report.report_status)}</span></div><h2 id="admin-report-title">Análise da denúncia</h2><p>Protocolo <code>${esc(report.report_id)}</code> · Enviada ${esc(fmtDate(report.created_at, true))}</p></div><section class="admin-report-body"><h3>Descrição complementar</h3><p>${esc(report.description)}</p></section><section class="admin-report-related"><h3>Ocorrência relacionada</h3>${occurrenceMarkup}</section><section class="admin-account-action" aria-labelledby="admin-report-decision-title"><h3 id="admin-report-decision-title">Triagem e decisão</h3>${actionForm}</section>${adminReportHistoryMarkup(history)}<p><a class="btn secondary" href="${backHref}">Voltar à fila</a></p></section>`), "Análise da denúncia");
     } catch (error) {
@@ -961,8 +1015,16 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         ? `#admin/denuncias/${encodeURIComponent(row.item_id)}?from=moderacao`
         : `#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}?from=moderacao`;
       const statusLabel = reportStatuses[row.item_status] || moderationVisibility[row.occurrence_visibility] || row.item_status;
-      const entityTitle = row.pet_name || "Animal sem vínculo";
-      return `<article class="admin-moderation-card"><header><div class="admin-occurrence-meta"><span class="admin-tag ${isReport ? "" : "lost"}">${isReport ? "Denúncia" : "Ocorrência"}</span><span class="admin-status ${row.item_status === "open" || row.item_status === "under_review" ? "suspended" : row.item_status === "resolved" ? "active" : ""}">${esc(statusLabel)}</span></div><h3>${esc(entityTitle)} · ${esc(itemTitle)}</h3></header><dl><div><dt>Animal / alerta</dt><dd>${esc(types[row.occurrence_type] || "Tipo indisponível")} · ${esc(states[row.occurrence_status] || "Situação indisponível")}</dd></div><div><dt>Região pública aproximada</dt><dd>${row.city ? `${esc(row.city)} · ${esc(row.region || "")}` : "Indisponível"}</dd></div><div><dt>Criado</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div><div><dt>Protocolo</dt><dd><code>${esc(row.item_id)}</code></dd></div>${isReport ? `<div><dt>Denúncias ativas neste alerta</dt><dd>${metric(row.active_report_count)}</dd></div>` : ""}</dl>${row.description ? `<p class="admin-moderation-description">${esc(row.description)}</p>` : ""}<a class="btn secondary small" href="${href}">Analisar ${isReport ? "denúncia" : "ocorrência"}</a></article>`;
+      const occurrenceLabel = types[row.occurrence_type]
+        ? `Alerta: ${types[row.occurrence_type].toLocaleLowerCase("pt-BR")}`
+        : "Alerta sem contexto público disponível";
+      const entityTitle = row.pet_name || occurrenceLabel;
+      const animalLabel = adminAnimalDetails(row);
+      const region = [row.city, row.region, row.public_reference].filter(Boolean).map(esc).join(" · ") || "Indisponível";
+      const reportIdentifier = isReport
+        ? `<div><dt>Protocolo da denúncia</dt><dd class="admin-secondary-id"><code>${esc(row.item_id)}</code></dd></div><div><dt>Identificador do alerta</dt><dd class="admin-secondary-id"><code>${esc(row.occurrence_id)}</code></dd></div>`
+        : `<div><dt>Identificador do alerta</dt><dd class="admin-secondary-id"><code>${esc(row.occurrence_id || row.item_id)}</code></dd></div>`;
+      return `<article class="admin-moderation-card"><header><div class="admin-occurrence-meta"><span class="admin-tag ${isReport ? "" : "lost"}">${isReport ? "Denúncia" : "Ocorrência"}</span><span class="admin-status ${row.item_status === "open" || row.item_status === "under_review" ? "suspended" : row.item_status === "resolved" ? "active" : ""}">${esc(statusLabel)}</span></div><h3>${esc(entityTitle)}</h3><p class="admin-moderation-animal">Animal: ${esc(animalLabel)}</p><p class="admin-moderation-reason">${isReport ? `Motivo: ${esc(reportCategories[row.category] || row.category)}` : esc(itemTitle)}</p></header><dl><div><dt>Situação</dt><dd>${esc(statusLabel)} · ${esc(states[row.occurrence_status] || "Situação indisponível")}</dd></div><div><dt>Região pública aproximada</dt><dd>${region}</dd></div><div><dt>Criado</dt><dd>${esc(fmtDate(row.created_at, true))}</dd></div>${reportIdentifier}${isReport ? `<div><dt>Denúncias ativas neste alerta</dt><dd>${metric(row.active_report_count)}</dd></div>` : ""}</dl>${row.description ? `<p class="admin-moderation-description"><strong>${isReport ? "Descrição da denúncia" : "Descrição do alerta"}:</strong> ${esc(row.description)}</p>` : ""}<a class="btn secondary small" href="${href}">Analisar ${isReport ? "denúncia" : "ocorrência"}</a></article>`;
     }).join("")}</div><nav class="admin-pagination" aria-label="Paginação da central de moderação"><span>${start}–${end} de ${metric(result.total)}</span><div><button class="btn secondary small" type="button" data-action="admin-moderation-page" data-page="${adminModeration.page - 1}" ${adminModeration.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${adminModeration.page} de ${pages}</span><button class="btn secondary small" type="button" data-action="admin-moderation-page" data-page="${adminModeration.page + 1}" ${adminModeration.page >= pages ? "disabled" : ""}>Próxima</button></div></nav>`;
   }
   function adminModerationFailure(error) {
@@ -1045,14 +1107,14 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     document.querySelector("#real-screen .account-details")?.insertAdjacentHTML("afterend", `<form class="form" id="real-account-form"><label>Nome de exibição<input class="control" name="full_name" value="${esc(current.name)}" minlength="2" maxlength="80" required></label><p class="form-error" role="alert"></p><button class="btn secondary" type="submit">Salvar nome</button></form>`);
   }
   function unavailable(heading = "Página indisponível") {
-    setPage(shell(heading, "Este recurso não está disponível no MVP conectado.", '<a class="btn primary" href="#home">Voltar aos alertas</a>', true), heading);
+    setPage(shell(heading, "Este recurso ainda não está disponível nesta versão.", '<a class="btn primary" href="#home">Voltar aos alertas</a>', true), heading);
   }
   function staticPage(route) {
     const content = {
-      services: ["Rede de apoio", "Cadastro de parceiros e serviços de resgate ainda indisponível neste MVP."],
-      sobre: ["Sobre o BuscaPet", "MVP acadêmico com autenticação, animais, ocorrências, fotos e avistamentos autenticados. A revisão jurídica e operacional ainda está pendente."],
-      termos: ["Termos de Uso", "Uso acadêmico de demonstração. Publique apenas dados e imagens que você está autorizado a utilizar. Não use este serviço como canal de emergência. A operação pública exige revisão jurídica e política operacional."],
-      privacidade: ["Privacidade", "O MVP conectado armazena conta, animais, ocorrências, fotografias e avistamentos no Supabase. A localização pública é aproximada. Prazos de retenção e atendimento aos direitos dos titulares precisam ser definidos antes de lançamento público."],
+      services: ["Rede de apoio", "Não há parceiros ou serviços cadastrados para divulgação neste ambiente. Compartilhe apenas informações públicas dos alertas e registre pistas pelo BuscaPet."],
+      sobre: ["Sobre o BuscaPet", "O BuscaPet ajuda tutores e comunidades a organizar buscas, publicar alertas e compartilhar avistamentos com localização aproximada."],
+      termos: ["Termos de Uso", "Este ambiente está em homologação. Use somente dados e imagens fictícios ou autorizados. Não publique informações pessoais de terceiros e não use o BuscaPet para situações de emergência."],
+      privacidade: ["Privacidade", "O BuscaPet usa dados da conta, dos animais, das ocorrências, das fotos e dos avistamentos para organizar as buscas. O mapa exibe apenas regiões aproximadas autorizadas. Neste ambiente, use somente dados fictícios ou autorizados."],
     }[route];
     if (!content) return unavailable();
     setPage(shell(content[0], content[1], '<a class="btn secondary" href="#home">Voltar</a>', true), content[0]);
@@ -1084,7 +1146,6 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       }
       if (route === "home") await home(ticket);
       else if (route === "mapa" || route === "map") {
-        if (id) mapMode = "real";
         realMapPage(id);
       }
       else if (route === "services") servicesPage();
@@ -1352,7 +1413,18 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
     if (!target) return;
     const action = target.dataset.action;
     try {
-      if (action === "admin-page") {
+      if (action === "home-type-filter") {
+        const type = target.dataset.type;
+        if (["", "lost", "found"].includes(type)) {
+          filters.type = type;
+          homeFocusTarget = `[data-action="home-type-filter"][data-type="${type}"]`;
+          void render();
+        }
+      } else if (action === "clear-home-filters") {
+        filters = { query: "", type: "", status: "" };
+        homeFocusTarget = "#real-query";
+        void render();
+      } else if (action === "admin-page") {
         const page = Number(target.dataset.page);
         if (Number.isInteger(page) && page >= 1) {
           adminDirectory.page = page;
@@ -1390,10 +1462,6 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
         await adminOccurrenceDetails(routeInfo().detailId, generation);
       } else if (action === "admin-account-status") {
         adminAccountStatusDialog(target.dataset.id, target.dataset.name || "Conta", target.dataset.status);
-      } else if (action === "map-mode") {
-        mapMode = target.dataset.mode === "demo" ? "demo" : "real";
-        if (mapMode === "demo" && mapOccurrenceId) navigate("#mapa");
-        else realMapPage(mapOccurrenceId);
       } else if (action === "apply-map-filters" || action === "refresh-map") {
         await loadRealMapPoints({ useViewport: action === "refresh-map" });
       } else if (action === "choose-center") {
@@ -1513,10 +1581,16 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       const term = filters.query.toLocaleLowerCase("pt-BR");
       let count = 0;
       for (const card of cards) {
-        card.hidden = !card.textContent.toLocaleLowerCase("pt-BR").includes(term);
+        card.hidden = !String(card.dataset.search || "").includes(term);
         if (!card.hidden) count++;
       }
-      document.querySelector("#real-result-count").textContent = `${count} ${count === 1 ? "alerta encontrado" : "alertas encontrados"}`;
+      const resultCount = document.querySelector("#real-result-count");
+      if (resultCount) resultCount.textContent = resultCountText(count);
+      const emptyState = document.querySelector("#home-client-empty");
+      if (emptyState) emptyState.hidden = count !== 0;
+      document.querySelectorAll('[data-action="clear-home-filters"]').forEach((button) => {
+        button.hidden = !(filters.query || filters.type || filters.status);
+      });
     }
   }
   function onChange(event) {
@@ -1570,8 +1644,11 @@ import { createSearchMap, createPointPicker, DEMO_MAP_POINTS, MAP_CATEGORY_META 
       if (mapController) mapController.setPoints(mapPoints, mapFilters, { fit: false });
       return;
     }
-    if (event.target.id === "real-type") { filters.type = event.target.value; void render(); }
-    if (event.target.id === "real-status") { filters.status = event.target.value; void render(); }
+    if (event.target.id === "real-status") {
+      filters.status = event.target.value;
+      homeFocusTarget = "#real-status";
+      void render();
+    }
     if (event.target.id === "pet-photo-input") {
       const preview = document.querySelector("#pet-photo-preview");
       if (!preview) return;

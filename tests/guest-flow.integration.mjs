@@ -31,6 +31,7 @@ try {
     ALLOWED_ORIGINS: 'http://localhost:5173', EXPECTED_HOSTNAME: 'example.test',
     EXPECTED_ACTION: 'report_guest_sighting', TURNSTILE_SECRET_KEY: 'test-only',
     INGRESS_HMAC_KEY: secret, GUEST_SIGHTING_RATE_SECRET: randomUUID(),
+    BUSCAPET_WRITE_MODE: 'open',
     SUPABASE_FUNCTION_URL: `${url}/functions/v1/report-guest-sighting`,
     GUEST_RATE_LIMITER: { idFromName: (name) => name,
       get: (name) => ({ fetch: async (...args) => {
@@ -49,7 +50,8 @@ try {
       return Response.json({ success: true, hostname: env.EXPECTED_HOSTNAME,
         action: env.EXPECTED_ACTION })
     }
-    if (String(target) === env.SUPABASE_FUNCTION_URL) {
+    if (String(target) === env.SUPABASE_FUNCTION_URL
+      || String(target) === `${env.SUPABASE_FUNCTION_URL}/status`) {
       forwarded = options
       return originalFetch(target, { ...options, headers: { apikey: publishable, ...options.headers } })
     }

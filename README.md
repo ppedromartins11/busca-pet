@@ -1,6 +1,6 @@
-# BuscaPet — MVP acadêmico
+# BuscaPet
 
-SPA em JavaScript e Vite para publicar e acompanhar buscas por animais. Com `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`, usa Supabase Auth, PostgreSQL com RLS e o bucket privado `pet-media`. Sem essas variáveis, abre o protótipo local legado, explicitamente identificado como demonstração.
+SPA em JavaScript e Vite para publicar e acompanhar buscas por animais. O modo conectado usa Supabase Auth, PostgreSQL com RLS e o bucket privado `pet-media`. A homologação online isolada ainda não está configurada. **Não copie valores de `.env` para uma demonstração nem aponte testes para produção.** Em build de produção sem as duas variáveis do Supabase, a aplicação mostra uma mensagem de configuração e não abre o protótipo local.
 
 ## Iniciar o modo conectado
 
@@ -8,13 +8,14 @@ Requer Node.js 22 ou superior. Em PowerShell:
 
 ```powershell
 npm.cmd ci
+# Só depois de criar e autorizar um projeto Supabase isolado:
 Copy-Item .env.example .env.local
 npm.cmd run dev -- --host 127.0.0.1
 ```
 
-Abra a URL impressa pelo Vite. `.env.example` contém apenas URL e chave pública do projeto `jpnvizdhyrvliqgvyxzx`. `.env.local` e `.env` são ignorados pelo Git. Jamais coloque `service_role`, secret key, senha de banco ou segredo de Worker em variáveis `VITE_` ou arquivos do frontend. Reinicie o servidor após mudar o ambiente.
+Abra a URL impressa pelo Vite. Substitua os dois valores de exemplo em `.env.local` por URL e chave publicável do projeto de homologação isolado. `.env.local` e `.env` são ignorados pelo Git. Jamais coloque `service_role`, secret key, senha de banco ou segredo de Worker em variáveis `VITE_` ou arquivos do frontend. Reinicie o servidor após mudar o ambiente.
 
-Configure manualmente **Authentication → URL Configuration** no projeto Supabase para o host e a porta usados pelo Vite. O cadastro retorna para `/#login` e a recuperação de senha usa `/?auth=reset`. A confirmação de e-mail e o envio de mensagens dependem da configuração de Auth/SMTP hospedada. Consulte [o roteiro da apresentação](docs/DEMO_PROFESSOR.md) antes de cadastrar uma conta de teste.
+Configure manualmente **Authentication → URL Configuration** no projeto isolado para o host e a porta usados pelo Vite. O cadastro retorna para `/#login` e a recuperação de senha usa `/?auth=reset`. A confirmação de e-mail e o envio de mensagens dependem da configuração de Auth/SMTP hospedada. Consulte o [estado e roteiro da homologação](docs/DEMO_HOMOLOGACAO.md) antes de cadastrar uma conta de teste.
 
 ## O que funciona no modo conectado
 
@@ -28,9 +29,11 @@ Configure manualmente **Authentication → URL Configuration** no projeto Supaba
 
 A autorização efetiva depende dos grants, das políticas RLS e das RPCs da migration. O frontend nunca recebe chave privilegiada. Os testes locais não substituem a homologação de escrita e isolamento com duas identidades no projeto remoto.
 
-O relato de visitante **sem conta** ainda depende de Cloudflare Worker, Turnstile e Edge Function, que não foram publicados. Favoritos, tarefas, denúncias e moderação não possuem persistência no schema atual e aparecem como recursos indisponíveis no modo conectado. Nenhum dado fictício do protótipo é exibido como ocorrência remota.
+O relato de visitante **sem conta** ainda depende de Cloudflare Worker, Turnstile e Edge Function, que não foram publicados. Denúncias e moderação têm código e migrations locais, mas dependem da aplicação dos contratos e de homologação no ambiente conectado; favoritos e tarefas continuam indisponíveis nesse modo. Nenhum dado fictício do protótipo é exibido como ocorrência remota.
 
 ## Modo local de contingência
+
+Para uma demonstração isolada, mesmo quando existe `.env` no checkout, execute `npm.cmd run demo`. O comando inicia o Vite em `127.0.0.1:5173` sem carregar o arquivo de ambiente do projeto; para outra porta, use `npm.cmd run demo -- 5180`. Confira o aviso de **protótipo local** antes de apresentar. As credenciais e os registros abaixo são fictícios e ficam somente no navegador.
 
 Sem `.env` e `.env.local` com as variáveis `VITE_SUPABASE_*`, reinicie o Vite. O aviso visual identifica o **protótipo local**, cujos dados ficam neste navegador. As contas fictícias abaixo usam somente a senha de demonstração `BuscaPetDemo!`:
 
@@ -54,8 +57,8 @@ Com Vite conectado já iniciado e Chrome/Edge disponível, `npm.cmd run test:bro
 
 ## Código e documentação
 
-`src/auth.js` preserva a API `BPAuth`; `src/remote-store.js` reúne as operações de Data API e Storage; `src/real-app.js` apresenta o modo conectado; `src/store.js` e `src/app.js` preservam o protótipo offline; `src/events.js` escolhe o modo. A migration está em `supabase/migrations/20261020233414_initial_buscapet_schema.sql`.
+`src/auth.js` preserva a API `BPAuth`; `src/remote-store.js` reúne as operações de Data API e Storage; `src/real-app.js` apresenta o modo conectado; `src/store.js` e `src/app.js` preservam o protótipo offline; `src/events.js` escolhe o modo. A migration inicial está em `supabase/migrations/20261020233414_initial_buscapet_schema.sql`; o checkout contém migrations incrementais posteriores.
 
-Veja [DEMO_PROFESSOR.md](docs/DEMO_PROFESSOR.md), [ARQUITETURA.md](docs/ARQUITETURA.md), [HOMOLOGACAO_MIGRATION.md](docs/HOMOLOGACAO_MIGRATION.md) e [SPRINT2_2_INGRESS.md](docs/SPRINT2_2_INGRESS.md). Parte da documentação anterior descreve o estado histórico da Sprint 2; este README descreve os dois modos atuais da SPA.
+Veja [DEMO_HOMOLOGACAO.md](docs/DEMO_HOMOLOGACAO.md), [ARQUITETURA.md](docs/ARQUITETURA.md), [HOMOLOGACAO_MIGRATION.md](docs/HOMOLOGACAO_MIGRATION.md) e [SPRINT2_2_INGRESS.md](docs/SPRINT2_2_INGRESS.md). Parte da documentação anterior descreve o estado histórico da Sprint 2; confirme sempre a data dos relatórios antes de tratar resultados antigos como atuais.
 
-O relatório atualizado, limitações, configuração externa e checklist da apresentação estão em [FINALIZACAO_MVP_20261021.md](docs/FINALIZACAO_MVP_20261021.md).
+O estado acadêmico atual, resultados e limites estão em [VERIFICACAO_ACADEMICA_2026-11-16.md](docs/VERIFICACAO_ACADEMICA_2026-11-16.md), com a [matriz de rastreabilidade](docs/MATRIZ_RASTREABILIDADE.md). [FINALIZACAO_MVP_20261021.md](docs/FINALIZACAO_MVP_20261021.md) permanece como registro histórico.

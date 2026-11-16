@@ -87,6 +87,32 @@ export default {
         { error: error?.message === 'large' ? 'payload_too_large' : 'invalid_request' }, allowed)
     }
     if (!valid(input)) return reply(400, { error: 'invalid_request' }, allowed)
+    if (env.BUSCAPET_WRITE_MODE !== 'open') {
+      return reply(503, { error: 'maintenance_active' }, allowed)
+    }
+
+    // Signed, read-only database preflight happens before the Durable Object
+    // charges a quota. The database gate remains authoritative for races.
+    const preflightTimestamp = String(Math.floor(Date.now() / 1000))
+    const preflightNonce = crypto.randomUUID()
+    const preflightCanonical = `GET\n${path}/status\n${preflightTimestamp}\n${preflightNonce}`
+    const preflightKey = await crypto.subtle.importKey('raw', encoder.encode(env.INGRESS_HMAC_KEY),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const preflightSignature = hex(await crypto.subtle.sign('HMAC', preflightKey,
+      encoder.encode(preflightCanonical)))
+    try {
+      const preflight = await fetch(`${env.SUPABASE_FUNCTION_URL}/status`, {
+        method: 'GET', signal: AbortSignal.timeout(5000),
+        headers: { 'x-buscapet-timestamp': preflightTimestamp,
+          'x-buscapet-nonce': preflightNonce,
+          'x-buscapet-signature': preflightSignature },
+      })
+      if (preflight.status !== 204) {
+        const body = preflight.status === 503 ? await preflight.json().catch(() => null) : null
+        return reply(503, { error: body?.error === 'maintenance_active'
+          ? 'maintenance_active' : 'unavailable' }, allowed)
+      }
+    } catch { return reply(503, { error: 'unavailable' }, allowed) }
 
     const sourceHash = await hash(`${env.GUEST_SIGHTING_RATE_SECRET}:ip:${ip}`)
     try {
@@ -129,6 +155,12 @@ export default {
       if (response.status === 202) return reply(202, { accepted: true }, allowed)
       if (response.status === 429) return reply(429, { error: 'rate_limited' }, allowed)
       if (response.status === 400) return reply(400, { error: 'sighting_unavailable' }, allowed)
+      if (response.status === 503) {
+        const body = await response.json().catch(() => null)
+        if (body?.error === 'maintenance_active') {
+          return reply(503, { error: 'maintenance_active' }, allowed)
+        }
+      }
       return reply(503, { error: 'unavailable' }, allowed)
     } catch { return reply(503, { error: 'unavailable' }, allowed) }
   },

@@ -1,5 +1,7 @@
 # BuscaPet — roteiro da apresentação (21/10/2026)
 
+> **Documento histórico, substituído.** Não siga as instruções de configuração deste roteiro para apontar para projetos existentes. Use [o estado atual da homologação isolada](DEMO_HOMOLOGACAO.md); uma demonstração online ainda depende de projeto de sandbox autorizado e configurado.
+
 ## Iniciar
 
 Na raiz do repositório, com Node.js 22 ou superior:

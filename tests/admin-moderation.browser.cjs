@@ -53,6 +53,12 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
         pet_name: `Denúncia ${index + 1}`, pet_species: "dog", description: `Fila de teste ${index + 1}`,
         active_report_count: 1,
       }));
+      moderationItems[1] = {
+        ...moderationItems[1], occurrence_type: "found", pet_name: null, pet_species: "dog",
+        city: null, region: null, public_reference: null,
+        description: "<img src=x onerror=alert(1)> relato sem nome ou região",
+        reporter_email: "reporter-private@example.test", exact_coordinates: "-15.123456,-56.123456",
+      };
       window.__moderationTest = { rows, history: auditRows, calls: [], moderationItems, reportId, releaseInitialQueue: null, deferInitialQueue: false };
       const client = window.BPSupabase.client;
       client.auth.getUser = async () => ({ data: { user: { id: userId } }, error: null });
@@ -152,9 +158,32 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
     assert.equal(await page.locator("#admin-occurrence-title").innerText(), "Bolinha 1 · Em busca",
       "moderação altera visibilidade sem mudar status da ocorrência");
 
+    await page.evaluate(async () => {
+      const row = window.__moderationTest.rows[2];
+      row.pet_name = null;
+      row.pet_species = "dog";
+      history.replaceState({}, "", `#admin/ocorrencias/${encodeURIComponent(row.occurrence_id)}`);
+      await window.BPRealApp.render();
+    });
+    const unavailableAnimalDetail = await page.locator(".admin-occurrence-detail").innerText();
+    assert.match(unavailableAnimalDetail, /Informações do animal indisponíveis/);
+    assert.match(unavailableAnimalDetail, /espécie: Cão/);
+    assert.doesNotMatch(unavailableAnimalDetail, /Sem vínculo|Animal sem vínculo/);
+
     await page.goto(`${base}/#admin/moderacao`, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Central de moderação" }).waitFor();
     await page.getByText("1–20 de 21").waitFor();
+    const noNameCard = page.locator(".admin-moderation-card").nth(1);
+    await noNameCard.getByRole("heading", { name: "Alerta: animal encontrado" }).waitFor();
+    const noNameText = await noNameCard.innerText();
+    assert.match(noNameText, /Informações do animal indisponíveis/);
+    assert.doesNotMatch(noNameText, /Sem vínculo|nome do animal não informado/);
+    assert.match(noNameText, /Região pública aproximada\s+Indisponível/);
+    assert.match(noNameText, /Protocolo da denúncia/);
+    assert.match(noNameText, /Identificador do alerta/);
+    assert.equal(await noNameCard.locator("img").count(), 0, "descrição não deve ser interpretada como HTML");
+    assert.equal(noNameText.includes("reporter-private@example.test"), false);
+    assert.equal(noNameText.includes("-15.123456"), false);
     await page.getByRole("button", { name: "Próxima" }).click();
     await page.getByText("21–21 de 21").waitFor();
     await page.evaluate(() => window.__moderationTest.moderationItems.pop());
@@ -196,7 +225,7 @@ const occurrenceId = "95200000-0000-4000-8000-000000000001";
     console.log(JSON.stringify({
       result: "passed",
       backend: "local fake endpoint with blocked network and fixture-only rows",
-      checks: ["search", "type/status filters", "occurrence pagination", "queue page recovery after concurrent removal", "updated total and navigation state", "newer filters survive late stale responses", "photo detail", "hide/restore", "audit", "status preserved"],
+      checks: ["search", "type/status filters", "occurrence pagination", "queue page recovery after concurrent removal", "updated total and navigation state", "newer filters survive late stale responses", "readable petless alert fallback", "missing public region fallback", "report protocol and alert identifier labels", "escaped description and private-field omission", "photo detail", "hide/restore", "audit", "status preserved"],
       responsiveWidths: widths,
       horizontalOverflow: overflow.some(Boolean),
       pageErrors: errors,
