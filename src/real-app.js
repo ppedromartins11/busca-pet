@@ -594,7 +594,7 @@ import hexPhotoUrl from "../assets/hex.png";
   }
   function verifyEmail() {
     if (localPreview) return registration();
-    authPage("Confirme seu e-mail", "Abra a mensagem enviada pelo Supabase Auth e depois entre na conta.", `<p class="notice">Se não encontrar a mensagem, confira o spam e a configuração de e-mail do projeto.</p><div class="actions"><button class="btn secondary" data-action="resend-email">Reenviar confirmação</button><a class="btn primary" href="#login">Voltar ao login</a></div>`);
+    authPage("Confirme seu e-mail", "Enviamos um link de confirmação para seu endereço de e-mail. Abra a mensagem e siga as instruções para ativar sua conta.", `<p class="notice">Não encontrou a mensagem? Verifique a caixa de spam ou solicite um novo envio.</p><div class="actions"><button class="btn secondary" type="button" data-action="resend-email">Reenviar e-mail</button><a class="btn primary" href="#login">Voltar ao login</a></div>`);
   }
   async function pets(ticket) {
     const rows = await D.listOwnPets();
