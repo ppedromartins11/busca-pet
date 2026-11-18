@@ -36,6 +36,11 @@ const chrome = process.env.CHROME_PATH || [
     assert.equal(await page.evaluate(() => window.BPLocalPreview?.active), true);
     assert.equal(await page.evaluate(() => window.BPSupabase.configured), false);
     assert.match(await page.locator(".demo-strip").innerText(), /somente neste navegador/);
+    await page.waitForFunction(() => {
+      const illustration = document.querySelector(".hero-pet > img");
+      return illustration?.complete && illustration.naturalWidth > 0;
+    }, { timeout: 10000 });
+
     assert.equal(await page.locator(".demo-strip").isVisible(), true);
 
     for (const width of [320, 360, 390, 768, 1024, 1440]) {
