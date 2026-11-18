@@ -39,7 +39,7 @@ const chrome = process.env.CHROME_PATH || [
     await page.waitForFunction(() => {
       const illustration = document.querySelector(".hero-pet > img");
       return illustration?.complete && illustration.naturalWidth > 0;
-    }, { timeout: 10000 });
+    }, undefined, { timeout: 10000 });
 
     assert.equal(await page.locator(".demo-strip").isVisible(), true);
 
