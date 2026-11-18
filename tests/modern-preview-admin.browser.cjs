@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const base = process.env.BASE_URL || "http://127.0.0.1:5186";
+const share = process.env.VERCEL_SHARE_URL;
 const chrome = process.env.CHROME_PATH || [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -16,6 +17,7 @@ const photo = fs.readFileSync(path.join(__dirname, "..", "assets", "hex.png"));
     for (const width of [390, 768, 1440]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
       const page = await context.newPage();
+      if (share) await page.goto(share);
       const errors = [];
       const remote = [];
       page.on("pageerror", (error) => errors.push(error.message));
