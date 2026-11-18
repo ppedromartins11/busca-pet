@@ -2398,6 +2398,30 @@ textarea.control {
   overflow: hidden;
   z-index: 0;
 }
+.geo-picker-location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.geo-picker-location-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+.geo-picker-location-actions .btn .ui-icon { width: 18px; height: 18px; }
+.geo-picker-location-actions .hint { flex: 1 1 220px; font-size: .82rem; }
+.geo-picker-location-status:empty { display: none; }
+.geo-picker-location-status:not(:empty) {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-subtle);
+  color: var(--ink);
+  font-size: .85rem;
+}
+@media (max-width: 640px) {
+  .geo-picker-location-actions { align-items: stretch; flex-direction: column; }
+  .geo-picker-location-actions .btn { justify-content: center; width: 100%; }
+}
 .geo-picker > label { display: block; margin: 14px 0; }
 .geo-picker > .check-label { display: flex; }
 .geo-picker .btn { max-width: 100%; }
