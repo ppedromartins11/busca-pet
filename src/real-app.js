@@ -304,7 +304,7 @@ import hexPhotoUrl from "../assets/hex.png";
   }
   function pointPickerMarkup(kind) {
     const occurrence = kind === "occurrence";
-    return `<fieldset class="geo-picker full"><legend>${occurrence ? "Última região conhecida" : "Região do avistamento"} (opcional)</legend><p>Amplie o mapa, clique na região e arraste o marcador se precisar ajustar. Pelo teclado, use as setas para mover o mapa e marque o centro. O ponto divulgado será arredondado e exibido como uma área de cerca de 900 metros de raio.</p><div class="geo-picker-map" id="${kind}-point-map" role="application" aria-label="Escolha uma região aproximada no mapa"></div><div class="actions"><button class="btn secondary small" type="button" data-action="choose-center">Marcar centro do mapa</button><button class="btn secondary small" type="button" data-action="clear-point">Remover região marcada</button></div><p id="point-selection-status" role="status">Nenhuma região marcada.</p><label>Referência pública da região<input class="control" name="location_description" maxlength="200" placeholder="Ex.: perto da praça central"></label><label class="check-label"><input type="checkbox" name="location_consent"><span>Autorizo divulgar esta região aproximada no mapa público${occurrence ? "." : " somente após revisão e aprovação do tutor."}</span></label></fieldset>`;
+    return `<fieldset class="geo-picker full"><legend>${occurrence ? "Última região conhecida" : "Região do avistamento"} (opcional)</legend><p>Use sua localização atual para ir direto à sua região, ou navegue no mapa. Depois, toque no lugar onde o animal foi visto pela última vez ou arraste o marcador. Pelo teclado, mova o mapa com as setas e use "Marcar centro do mapa". A área roxa indica o que será divulgado: um raio aproximado de 900 metros, nunca sua posição exata.</p><div class="geo-picker-location-actions"><button class="btn secondary" type="button" data-action="locate-point">${icon("pin")} Usar minha localização atual</button><span class="hint">Centraliza o mapa; não marca nem publica sua posição automaticamente.</span></div><p id="point-location-status" class="geo-picker-location-status" role="status" aria-live="polite"></p><div class="geo-picker-map" id="${kind}-point-map" role="application" aria-label="Escolha uma região aproximada no mapa"></div><div class="actions"><button class="btn secondary small" type="button" data-action="choose-center">Marcar centro do mapa</button><button class="btn secondary small" type="button" data-action="clear-point">Remover região marcada</button></div><p id="point-selection-status" role="status">Nenhuma região marcada.</p><label>Referência pública da região<input class="control" name="location_description" maxlength="200" placeholder="Ex.: perto da praça central"></label><label class="check-label"><input type="checkbox" name="location_consent"><span>Autorizo divulgar esta região aproximada no mapa público${occurrence ? "." : " somente após revisão e aprovação do tutor."}</span></label></fieldset>`;
   }
   function mountPointPicker(kind, initial = null) {
     const target = document.querySelector(`#${kind}-point-map`);
@@ -317,7 +317,7 @@ import hexPhotoUrl from "../assets/hex.png";
       onChange: (point) => {
       selectedPoint = point;
       const status = document.querySelector("#point-selection-status");
-      if (status) status.textContent = "Região aproximada marcada no mapa (raio de 900 m).";
+      if (status) status.textContent = "Ponto escolhido. A área roxa mostra a região pública aproximada (raio de 900 m).";
       if (kind === "occurrence" && initial
         && (point.latitude !== initial.latitude || point.longitude !== initial.longitude)) {
         const consent = document.querySelector('[name="location_consent"]');
@@ -1583,6 +1583,25 @@ import hexPhotoUrl from "../assets/hex.png";
         adminAccountStatusDialog(target.dataset.id, target.dataset.name || "Conta", target.dataset.status);
       } else if (action === "apply-map-filters" || action === "refresh-map") {
         await loadRealMapPoints({ useViewport: action === "refresh-map" });
+      } else if (action === "locate-point") {
+        const locationStatus = document.querySelector("#point-location-status");
+        if (pointPicker?.locateCurrent) {
+          target.disabled = true;
+          if (locationStatus) locationStatus.textContent = "Buscando sua localização. Autorize o acesso no navegador, se solicitado…";
+          pointPicker.locateCurrent({
+            onSuccess: ({ accuracy }) => {
+              if (!target.isConnected) return;
+              target.disabled = false;
+              const precision = accuracy !== null ? ` Precisão estimada: ${accuracy} m.` : "";
+              if (locationStatus) locationStatus.textContent = `Mapa centralizado na sua posição.${precision} Escolha no mapa o lugar onde o animal foi visto. Nada foi marcado ou publicado automaticamente.`;
+            },
+            onError: (description) => {
+              if (!target.isConnected) return;
+              target.disabled = false;
+              if (locationStatus) locationStatus.textContent = description;
+            },
+          });
+        }
       } else if (action === "choose-center") {
         pointPicker?.chooseCenter();
       } else if (action === "clear-point") {
