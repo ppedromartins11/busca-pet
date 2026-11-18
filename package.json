@@ -13,10 +13,13 @@
     "test:browser:admin-reports:local": "node tests/admin-reports.local.cjs",
     "test:browser:admin-reports:concurrency:local": "node tests/admin-reports-concurrency.local.cjs",
     "test:browser:real": "node tests/browser-real.cjs",
-    "check": "node --check src/constants.js && node --check src/storage.js && node --check src/validation.js && node --check src/store.js && node --check src/supabase-client.js && node --check src/remote-store.js && node --check src/auth.js && node --check src/drafts.js && node --check src/permissions.js && node --check src/router.js && node --check src/legal.js && node --check src/images.js && node --check src/views.js && node --check src/search-map.js && node --check src/app.js && node --check src/real-app.js && node --check src/events.js && node --check src/main.js && node --check cloudflare/guest-ingress/index.js && node --check scripts/start-demo.mjs",
+    "check": "node --check src/constants.js && node --check src/storage.js && node --check src/validation.js && node --check src/store.js && node --check src/supabase-client.js && node --check src/remote-store.js && node --check src/auth.js && node --check src/local-preview.js && node --check src/drafts.js && node --check src/permissions.js && node --check src/router.js && node --check src/legal.js && node --check src/images.js && node --check src/views.js && node --check src/search-map.js && node --check src/ui-preferences.js && node --check src/app.js && node --check src/real-app.js && node --check src/events.js && node --check src/main.js && node --check cloudflare/guest-ingress/index.js && node --check scripts/start-demo.mjs && node --check scripts/start-modern-preview.mjs",
     "dev": "vite",
     "demo": "node scripts/start-demo.mjs",
+    "preview:local": "node scripts/start-modern-preview.mjs",
+    "test:browser:modern-preview": "node tests/modern-preview.browser.cjs && node tests/modern-preview-journey.browser.cjs && node tests/modern-preview-admin.browser.cjs",
     "build": "vite build",
+    "build:presentation": "vite build --mode presentation",
     "preview": "vite preview"
   },
   "engines": {

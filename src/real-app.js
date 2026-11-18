@@ -5,6 +5,7 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   "use strict";
   const A = window.BPAuth;
   const D = window.BPRemoteStore;
+  const localPreview = Boolean(window.BPLocalPreview?.active);
   const Drafts = window.BPDrafts;
   const { escape: esc, icon, fmtDate, empty } = window.BPViews;
   const root = document.querySelector("#main-content");
@@ -138,19 +139,24 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     else location.hash = hash;
   }
   function mount() {
+    document.body.classList.add("bp-real-app");
+    root.classList.add("real-app");
+    root.classList.toggle("local-preview", localPreview);
     root.innerHTML = `<header class="app-header"><a class="logo" href="#home" aria-label="BuscaPet, início">${icon("paw")}<span class="wordmark">Busca<strong>Pet</strong></span></a><nav class="main-nav" aria-label="Navegação principal" id="real-nav"></nav><div class="header-actions" id="real-header-actions"></div><button class="menu-toggle" type="button" aria-controls="real-mobile-nav" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button><nav class="mobile-nav" id="real-mobile-nav" aria-label="Menu móvel" hidden></nav></header><div class="demo-strip"><span>Ambiente de homologação · use somente dados e imagens autorizados</span></div><div id="real-toast" class="toast" role="status" aria-live="polite"></div><section id="real-screen" class="screen current" aria-live="off"></section><dialog id="real-dialog" class="dialog"></dialog>`;
+    if (localPreview) document.querySelector(".demo-strip span").textContent = "Prévia local: dados somente neste navegador, sem conta real ou sincronização";
     document.querySelector("#real-dialog").addEventListener("close", () => lastDialogFocus?.focus());
     window.matchMedia("(min-width: 1200px)").addEventListener("change", (event) => { if (event.matches) closeMobileMenu(); });
   }
   function chrome(route) {
     const logged = Boolean(user());
+    const tutor = logged && (!localPreview || user()?.activeRole === "tutor");
     const admin = window.BPPermissions?.can("viewAdminDashboard");
     const moderator = window.BPPermissions?.can("moderate");
     const links = [
       ["home", "Início", "home"],
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
-      ...(logged ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
       ...(admin ? [["admin", "Administração", "user"]]
         : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
     ];
@@ -175,6 +181,41 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   function setPage(html, heading = "BuscaPet") {
     const screen = document.querySelector("#real-screen");
     screen.innerHTML = html;
+    for (const input of screen.querySelectorAll('input[type="file"]')) {
+      const label = input.closest("label");
+      if (!label) continue;
+      label.classList.add("file-picker-label");
+      input.classList.add("file-picker-input");
+      input.insertAdjacentHTML("afterend", `<span class="file-picker-control"><b aria-hidden="true">${input.multiple ? "Escolher fotos" : "Escolher foto"}</b><span class="file-picker-name" role="status" aria-live="polite">Nenhuma foto selecionada</span></span>`);
+    }
+    if (localPreview) {
+      const labels = [
+        [".catalog-heading .eyebrow", "Alertas desta prévia local"],
+        [".card-kicker", "Alerta desta prévia local"],
+        [".auth-context h2", "Organize sua prévia neste navegador."],
+        [".auth-context p:last-child", "Experimente os fluxos com dados salvos somente aqui."],
+      ];
+      for (const [selector, label] of labels) screen.querySelectorAll(selector).forEach((element) => { element.textContent = label; });
+      const sightingNotice = screen.querySelector("#real-sighting-form")?.previousElementSibling;
+      if (sightingNotice?.classList.contains("notice")) sightingNotice.textContent = "Avistamentos desta prévia são salvos somente neste navegador.";
+      const petIntro = screen.querySelector("#real-pet-form")?.closest(".page")?.querySelector(".page-title .intro");
+      if (petIntro) petIntro.textContent = "Cadastro salvo somente neste navegador.";
+      const homeEmpty = screen.querySelector(".home-empty");
+      if (homeEmpty && !screen.querySelector('[data-action="clear-home-filters"]:not([hidden])')) {
+        homeEmpty.querySelector("h3").textContent = "Ainda não há alertas nesta prévia";
+        homeEmpty.querySelector("p").textContent = "Publique uma ocorrência nesta prévia para vê-la aqui.";
+      }
+      const searchHelp = screen.querySelector("#home-search-help");
+      if (searchHelp) searchHelp.textContent = "A busca consulta somente alertas salvos neste navegador.";
+      const visibilityTag = screen.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
+      if (visibilityTag?.textContent === "Público") visibilityTag.textContent = "Visível nesta prévia";
+      const reportIntro = screen.querySelector(".report-form-page")?.closest(".page")?.querySelector(".page-title .intro");
+      if (reportIntro) reportIntro.textContent = "Denúncia de teste salva somente neste navegador para demonstração da moderação.";
+      const reportHint = screen.querySelector("#real-occurrence-report-form .hint:last-of-type");
+      if (reportHint) reportHint.textContent = "Esta denúncia de teste não oculta o alerta automaticamente. Analise-a no painel de Administrador Local.";
+      const reportConfidentiality = screen.querySelector(".report-confidentiality");
+      if (reportConfidentiality) reportConfidentiality.textContent = "Registro de teste: esta prévia usa uma identidade de Tutor Local compartilhada neste navegador.";
+    }
     document.title = `BuscaPet | ${heading}`;
     const h1 = screen.querySelector("h1");
     if (h1) { h1.tabIndex = -1; h1.focus({ preventScroll: true }); }
@@ -231,7 +272,7 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
       const lists = mapListHtml(mapPoints);
       document.querySelector("#map-timeline-events").innerHTML = lists.timeline;
       document.querySelector("#map-text-points").innerHTML = lists.list;
-      status.textContent = `${mapPoints.length} ${mapPoints.length === 1 ? "ponto publicado" : "pontos publicados"}`;
+      status.textContent = `${mapPoints.length} ${localPreview ? (mapPoints.length === 1 ? "ponto desta prévia" : "pontos desta prévia") : (mapPoints.length === 1 ? "ponto publicado" : "pontos publicados")}`;
     } catch (error) {
       if (request !== mapQueryGeneration || mapController !== controller) return;
       status.textContent = error?.code === "NOT_PUBLISHED" || error?.code === "UNAVAILABLE"
@@ -432,12 +473,20 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     if (ticket !== generation) return;
     if (!row) return unavailable("Alerta indisponível");
     const mine = row.is_owner === true;
-    const canReport = row.status === "active" && row.visibility === "public" && !mine;
+    const canReport = row.status === "active" && row.visibility === "public" && (!mine || localPreview)
+      && (!localPreview || user()?.activeRole !== "administrador");
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
     const reportLink = canReport
       ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
       : "";
     setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    if (localPreview && row.visibility === "under_review") {
+      const visibility = document.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
+      if (visibility) visibility.textContent = "Oculta para moderação nesta prévia";
+    }
+    if (localPreview && mine && row.status === "active" && row.visibility === "public") {
+      document.querySelector(".detail-layout .actions")?.insertAdjacentHTML("beforeend", `<a class="btn secondary" href="${url("avistamento", id)}">Registrar avistamento nesta prévia</a>`);
+    }
     const mapState = document.createElement("section");
     mapState.className = "occurrence-map-state";
     mapState.innerHTML = '<h2 class="section-heading">Região no mapa</h2><p>Verificando região publicada…</p>';
@@ -462,7 +511,7 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     ]);
     if (ticket !== generation) return;
     if (!occurrence || occurrence.visibility !== "public"
-      || occurrence.status !== "active" || occurrence.is_owner === true) {
+      || occurrence.status !== "active" || (occurrence.is_owner === true && !localPreview)) {
       return unavailable("Este alerta não está disponível para denúncia");
     }
     const occurrenceType = types[occurrence.type] || "Tipo do alerta indisponível";
@@ -526,19 +575,24 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   }
   const password = (name, label, autocomplete) => `<label>${label}<span class="password-control"><input class="control" type="password" name="${name}" autocomplete="${autocomplete}" required><button class="password-toggle" type="button" data-action="toggle-password" aria-label="Mostrar ${label.toLowerCase()}">Mostrar</button></span></label>`;
   function login() {
+    if (localPreview) return authPage("Entrar na prévia local", "Escolha um perfil demonstrativo. Os dados ficam neste navegador; não há senha nem autenticação segura.", '<div class="actions"><button class="btn primary" type="button" data-action="enter-local-preview" data-role="tutor">Entrar como Tutor Local</button><button class="btn secondary" type="button" data-action="enter-local-preview" data-role="admin">Entrar como Administrador Local</button><a class="btn secondary" href="#home">Voltar</a></div><p class="hint">O Administrador Local não concede permissões no Supabase.</p>');
     authPage("Entre no BuscaPet", "Use seu e-mail e senha.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>`);
   }
   function registration() {
+    if (localPreview) return authPage("Cadastro indisponível na prévia", "Contas reais exigem Supabase. Para explorar os fluxos sem senha, entre na prévia local.", '<a class="btn primary" href="#login">Entrar na prévia local</a>');
     authPage("Crie sua conta", "Uma Conta BuscaPet permite publicar alertas, registrar avistamentos e cuidar dos seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
   }
   function forgot() {
+    if (localPreview) return authPage("Recuperação indisponível na prévia", "A prévia local não cria contas nem armazena senhas.", '<a class="btn primary" href="#login">Voltar à prévia local</a>');
     authPage("Recuperar senha", "Se houver uma conta para este e-mail, enviaremos instruções.", `<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><p class="form-error" role="alert"></p><p class="form-success" role="status"></p><button class="btn primary" type="submit">Enviar instruções</button><a href="#login">Voltar ao login</a></form>`);
   }
   function reset() {
+    if (localPreview) return forgot();
     if (!A.canResetPassword?.()) return authPage("Link indisponível", "Solicite um novo link de recuperação.", '<a class="btn primary" href="#esqueci-senha">Solicitar novo link</a>');
     authPage("Definir nova senha", "Escolha uma nova senha para sua conta.", `<form class="form auth-form" id="real-reset">${password("password", "Nova senha", "new-password")}${password("passwordConfirmation", "Confirmação", "new-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form>`);
   }
   function verifyEmail() {
+    if (localPreview) return registration();
     authPage("Confirme seu e-mail", "Abra a mensagem enviada pelo Supabase Auth e depois entre na conta.", `<p class="notice">Se não encontrar a mensagem, confira o spam e a configuração de e-mail do projeto.</p><div class="actions"><button class="btn secondary" data-action="resend-email">Reenviar confirmação</button><a class="btn primary" href="#login">Voltar ao login</a></div>`);
   }
   async function pets(ticket) {
@@ -627,6 +681,48 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   }
   function adminMetric(iconName, value, label, detail = "") {
     return `<article class="admin-metric"><span class="admin-metric-icon">${icon(iconName)}</span><div><b>${metric(value)}</b><h3>${esc(label)}</h3>${detail ? `<p>${esc(detail)}</p>` : ""}</div></article>`;
+  }
+  async function localAdminPage(section = "", detailId = "", ticket = generation) {
+    if (!localPreview || !window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
+    const data = await D.localAdminSnapshot();
+    if (ticket !== generation) return;
+    const links = [["", "Visão geral"], ["usuarios", "Usuários"], ["ocorrencias", "Ocorrências"], ["denuncias", "Denúncias"], ["moderacao", "Central de moderação"]];
+    const nav = `<nav class="admin-nav" aria-label="Navegação administrativa">${links.map(([key, label]) => `<a href="#admin${key ? `/${key}` : ""}" ${section === key ? 'class="active" aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
+    const header = `<header class="admin-header"><div><span class="admin-eyebrow">Prévia local demonstrativa</span><h1>Administração Local</h1><p>Registros somente deste navegador. Este perfil não altera o Supabase nem representa autorização de servidor.</p></div><div class="admin-header-actions"><button class="btn plain" type="button" data-action="logout">Sair</button></div></header>`;
+    const label = (row) => `${types[row.type] || "Alerta"} · ${row.city || "Cidade não informada"} · ${row.region || "Região não informada"}`;
+    const status = (row) => row.visibility === "under_review" ? "Oculta" : row.visibility === "public" ? "Visível" : "Privada";
+    const history = `<section class="admin-group"><h2>Histórico administrativo</h2>${data.history.length ? `<ol class="admin-audit-list">${data.history.map((entry) => `<li><strong>${esc(({ hide: "Publicação ocultada", restore: "Publicação restaurada", resolved: "Denúncia aprovada", dismissed: "Denúncia rejeitada", in_review: "Análise iniciada", active: "Tutor ativado", suspended: "Tutor desativado" })[entry.decision] || entry.decision)}</strong><span>${esc(fmtDate(entry.created_at, true))} · ${esc(entry.actor_name)} · registro de teste</span><p>${esc(entry.reason)}</p></li>`).join("")}</ol>` : '<p class="hint">Nenhuma ação administrativa nesta prévia.</p>'}</section>`;
+    const activities = [
+      ...data.pets.map((row) => ({ at: row.created_at, text: `Animal cadastrado: ${row.name}` })),
+      ...data.occurrences.map((row) => ({ at: row.created_at, text: `Ocorrência publicada: ${label(row)}` })),
+      ...data.reports.map((row) => ({ at: row.created_at, text: "Denúncia de teste registrada" })),
+      ...data.history.map((row) => ({ at: row.created_at, text: `Decisão administrativa: ${row.decision}` })),
+    ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 5);
+    const actionForm = (kind, id, decision, title) => `<form class="form local-admin-action" data-kind="${kind}" data-id="${esc(id)}" data-decision="${decision}"><label>${esc(title)}: motivo da decisão *<textarea class="control" name="reason" minlength="10" maxlength="500" required></textarea></label><p class="form-error" role="alert"></p><button class="btn ${decision === "hide" || decision === "suspended" ? "danger" : "secondary"}" type="submit">${esc(title)}</button></form>`;
+    const occurrenceItem = (row) => `<article class="local-admin-item"><h3>${esc(label(row))}</h3><p>${esc(states[row.status] || row.status)} · ${status(row)} · registro desta prévia</p><a class="btn secondary small" href="#admin/ocorrencias/${esc(row.id)}">Ver detalhes</a></article>`;
+    const reportItem = (row) => { const occurrence = data.occurrences.find((item) => item.id === row.occurrence_id); return `<article class="local-admin-item"><h3>${esc(reportCategories[row.category] || row.category)}</h3><p>${esc(label(occurrence || {}))} · ${esc(reportStatuses[row.report_status] || row.report_status)} · registro de teste</p><a class="btn secondary small" href="#admin/denuncias/${esc(row.id)}">Ver detalhes</a></article>`; };
+    let content = "";
+    if (!section) {
+      const pending = data.reports.filter((row) => ["open", "in_review"].includes(row.report_status)).length;
+      content = `<div class="admin-content-heading"><h2>Indicadores desta prévia</h2><p>Contagens calculadas dos registros salvos neste navegador.</p></div><div class="admin-metrics">${adminMetric("user", data.users.length, "Usuários locais")}${adminMetric("paw", data.pets.length, "Animais")}${adminMetric("search", data.occurrences.length, "Ocorrências")}${adminMetric("search", data.occurrences.filter((row) => row.status === "active").length, "Ativas")}${adminMetric("heart", data.occurrences.filter((row) => row.status !== "active").length, "Encerradas ou localizadas")}${adminMetric("shield", pending, "Denúncias pendentes")}${adminMetric("shield", pending + data.occurrences.filter((row) => row.visibility === "under_review").length, "Registros aguardando moderação")}</div><div class="actions">${links.slice(1).map(([key, name]) => `<a class="btn secondary" href="#admin/${key}">${name}</a>`).join("")}</div><section class="admin-group"><h2>Atividades recentes</h2>${activities.length ? `<ol class="admin-audit-list">${activities.map((item) => `<li><strong>${esc(item.text)}</strong><span>${esc(fmtDate(item.at, true))} · registro desta prévia</span></li>`).join("")}</ol>` : '<p class="hint">Nenhuma atividade nesta prévia.</p>'}</section>${history}`;
+    } else if (section === "usuarios") {
+      const account = data.users.find((row) => row.id === detailId);
+      content = detailId && account ? `<a class="back-link" href="#admin/usuarios">‹ Voltar</a><h2>${esc(account.name)}</h2><p>${account.status === "active" ? "Ativo" : "Desativado"} · registro demonstrativo</p><h3>Animais relacionados</h3>${data.pets.length ? `<ul>${data.pets.map((row) => `<li>${esc(row.name)}</li>`).join("")}</ul>` : '<p class="hint">Nenhum animal.</p>'}<h3>Ocorrências relacionadas</h3>${data.occurrences.map(occurrenceItem).join("") || '<p class="hint">Nenhuma ocorrência.</p>'}${actionForm("user", account.id, account.status === "active" ? "suspended" : "active", account.status === "active" ? "Desativar Tutor Local" : "Ativar Tutor Local")}${history}`
+        : `<div class="admin-content-heading"><h2>Usuários locais</h2><p>Somente identidades demonstrativas; nenhuma conta real.</p></div><div class="local-admin-filters"><label>Buscar por nome<input class="control" data-admin-filter="query" placeholder="Nome"></label><label>Situação<select class="control" data-admin-filter="status"><option value="">Todas</option><option value="active">Ativo</option><option value="suspended">Desativado</option></select></label></div>${data.users.map((row) => `<article class="local-admin-item" data-admin-row data-search="${esc(row.name.toLowerCase())}" data-status="${esc(row.status)}"><h3>${esc(row.name)}</h3><p>${row.status === "active" ? "Ativo" : "Desativado"} · registro demonstrativo</p><a class="btn secondary small" href="#admin/usuarios/${esc(row.id)}">Ver detalhes</a></article>`).join("")}<p class="hint" data-admin-empty hidden>Nenhum usuário corresponde aos filtros.</p>`;
+    } else if (section === "ocorrencias") {
+      const row = data.occurrences.find((item) => item.id === detailId);
+      content = detailId && row ? `<a class="back-link" href="#admin/ocorrencias">‹ Voltar</a><h2>${esc(label(row))}</h2><p>${esc(states[row.status] || row.status)} · ${status(row)} · registro desta prévia</p><p>${esc(row.description || "Sem descrição")}</p><p>${esc(row.public_reference || "Sem referência pública")}</p>${row.visibility === "public" ? actionForm("occurrence", row.id, "hide", "Ocultar publicação") : row.visibility === "under_review" ? actionForm("occurrence", row.id, "restore", "Restaurar publicação") : '<p class="hint">Publicação privada; não há ação de moderação disponível.</p>'}${history}`
+        : `<div class="admin-content-heading"><h2>Ocorrências locais</h2><p>Inclui publicações ocultas e privadas.</p></div><div class="local-admin-filters"><label>Buscar<input class="control" data-admin-filter="query" placeholder="Cidade, região ou descrição"></label><label>Situação<select class="control" data-admin-filter="status"><option value="">Todas</option>${Object.entries(states).map(([key, value]) => `<option value="${key}">${value}</option>`).join("")}</select></label><label>Tipo<select class="control" data-admin-filter="type"><option value="">Todos</option>${Object.entries(types).map(([key, value]) => `<option value="${key}">${value}</option>`).join("")}</select></label></div>${data.occurrences.map((item) => `<div data-admin-row data-search="${esc(`${label(item)} ${item.description || ""}`.toLowerCase())}" data-status="${esc(item.status)}" data-type="${esc(item.type)}">${occurrenceItem(item)}</div>`).join("") || '<p class="hint">Nenhuma ocorrência local.</p>'}<p class="hint" data-admin-empty hidden>Nenhuma ocorrência corresponde aos filtros.</p>`;
+    } else if (section === "denuncias") {
+      const report = data.reports.find((row) => row.id === detailId);
+      content = detailId && report ? `<a class="back-link" href="#admin/denuncias">‹ Voltar</a><h2>Denúncia de teste</h2><p><strong>Motivo:</strong> ${esc(reportCategories[report.category] || report.category)}</p><p><strong>Situação:</strong> ${esc(reportStatuses[report.report_status] || report.report_status)}</p><p><strong>Publicação:</strong> <a href="#admin/ocorrencias/${esc(report.occurrence_id)}">Ver ocorrência relacionada</a></p><p>${esc(report.description)}</p>${["open", "in_review"].includes(report.report_status) ? `${report.report_status === "open" ? actionForm("report", report.id, "in_review", "Iniciar análise") : ""}${actionForm("report", report.id, "resolved", "Aprovar denúncia e ocultar ocorrência")}${actionForm("report", report.id, "dismissed", "Rejeitar denúncia")}` : '<p class="notice">Decisão registrada no histórico.</p>'}${history}`
+        : `<div class="admin-content-heading"><h2>Denúncias de teste</h2><p>Enviadas somente nesta prévia local.</p></div>${data.reports.map(reportItem).join("") || '<p class="hint">Nenhuma denúncia de teste.</p>'}`;
+    } else if (section === "moderacao") {
+      const pendingReports = data.reports.filter((row) => ["open", "in_review"].includes(row.report_status));
+      const hidden = data.occurrences.filter((row) => row.visibility === "under_review");
+      content = `<div class="admin-content-heading"><h2>Central de moderação</h2><p>${pendingReports.length} ${pendingReports.length === 1 ? "denúncia pendente" : "denúncias pendentes"} · ${hidden.length} ${hidden.length === 1 ? "publicação oculta" : "publicações ocultas"}.</p></div><div class="local-admin-filters"><label>Buscar<input class="control" data-admin-filter="query" placeholder="Buscar item"></label><label>Tipo<select class="control" data-admin-filter="type"><option value="">Todos</option><option value="report">Denúncia</option><option value="occurrence">Ocorrência</option></select></label></div>${pendingReports.map((row) => `<div data-admin-row data-type="report" data-search="${esc(`${row.category} ${row.description}`.toLowerCase())}">${reportItem(row)}</div>`).join("")}${hidden.map((row) => `<div data-admin-row data-type="occurrence" data-search="${esc(label(row).toLowerCase())}">${occurrenceItem(row)}</div>`).join("")}${!pendingReports.length && !hidden.length ? '<p class="hint">Nenhum item aguardando moderação.</p>' : ""}<p class="hint" data-admin-empty hidden>Nenhum item corresponde aos filtros.</p>${history}`;
+    } else return unavailable("Página administrativa indisponível");
+    setPage(`<main class="admin-area local-admin-area" aria-label="Administração demonstrativa">${header}<div class="admin-layout">${nav}<section class="admin-content">${content}</section></div></main>`, "Administração Local");
   }
   const adminRoleLabels = Object.freeze({ tutor: "Tutor", colaborador: "Colaborador", parceiro: "Parceiro", moderador: "Moderador", administrador: "Administrador" });
   function adminNavigation(active) {
@@ -1099,10 +1195,12 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   }
   function renderAccount() {
     const current = user();
+    if (localPreview) return setPage(shell("Minha conta", "Identidade temporária desta prévia local.", '<p class="notice">Os animais, alertas e fotos desta prévia ficam somente neste navegador. Não há conta real, senha ou sincronização.</p><div class="actions"><button class="btn secondary" data-action="logout">Sair da prévia</button><button class="btn danger" data-action="clear-local-preview">Limpar dados desta prévia</button></div>', true), "Minha conta");
     setPage(shell("Minha conta", "Dados da sua Conta BuscaPet.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Tipo de conta</dt><dd>Conta BuscaPet</dd></div></dl><div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">As permissões sensíveis são verificadas no servidor. Recursos administrativos não são exibidos nesta versão.</p>`, true), "Minha conta");
   }
   function account() {
     renderAccount();
+    if (localPreview) return;
     const current = user();
     document.querySelector("#real-screen .account-details")?.insertAdjacentHTML("afterend", `<form class="form" id="real-account-form"><label>Nome de exibição<input class="control" name="full_name" value="${esc(current.name)}" minlength="2" maxlength="80" required></label><p class="form-error" role="alert"></p><button class="btn secondary" type="submit">Salvar nome</button></form>`);
   }
@@ -1138,6 +1236,8 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
         return;
       }
       chrome(route === "map" ? "mapa" : route);
+      if (localPreview && user()?.activeRole === "administrador" && ["meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar"].includes(route)) return adminDenied();
+      if (localPreview && route === "admin") return localAdminPage(id, detailId, ticket);
       if (route === "admin" && (["ocorrencias", "denuncias", "moderacao"].includes(id)
         ? !window.BPPermissions?.can("moderate")
         : !window.BPPermissions?.can("viewAdminDashboard"))) {
@@ -1203,6 +1303,18 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
   }
   async function onSubmit(event) {
     const form = event.target;
+    if (localPreview && form.classList?.contains("local-admin-action")) {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const decision = form.dataset.decision;
+      if (!window.confirm(`Confirmar: ${form.querySelector('button[type="submit"]')?.textContent}? A ação e o motivo ficarão no histórico local.`)) return;
+      await busy(form, async () => {
+        await D.localAdminAction(form.dataset.kind, form.dataset.id, decision, formValue(form, "reason"));
+        message("Decisão demonstrativa registrada nesta prévia.");
+        await localAdminPage(routeInfo().id, routeInfo().detailId, generation);
+      });
+      return;
+    }
     if (form.id === "admin-report-transition-form") {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -1377,7 +1489,9 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
           catch (error) { notice = `Avistamento recebido, mas a região não foi associada: ${fail(error)}`; }
         }
         clearFormDraft(form);
-        message(notice || "Avistamento registrado para o responsável. A região só aparecerá após revisão e autorização.");
+        message(notice || (localPreview
+          ? "Avistamento salvo nesta prévia. A região só aparecerá no mapa após revisão e autorização aqui."
+          : "Avistamento registrado para o responsável. A região só aparecerá após revisão e autorização."));
         notice = "";
         navigate(url("pet", form.dataset.id));
       }
@@ -1413,7 +1527,11 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     if (!target) return;
     const action = target.dataset.action;
     try {
-      if (action === "home-type-filter") {
+      if (action === "enter-local-preview") {
+        const role = target.dataset.role || "tutor";
+        window.BPLocalPreview.enter(role);
+        navigate(role === "admin" ? "#admin" : returnAfterLogin());
+      } else if (action === "home-type-filter") {
         const type = target.dataset.type;
         if (["", "lost", "found"].includes(type)) {
           filters.type = type;
@@ -1502,6 +1620,15 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
         message("");
         notice = "Sessão encerrada.";
         void render();
+      } else if (action === "clear-local-preview" && localPreview) {
+        confirmDialog("Limpar dados desta prévia?", "Animais, alertas, avistamentos, denúncias, decisões administrativas, fotos e rascunhos locais serão excluídos deste navegador. Esta ação não pode ser desfeita.", "confirm-clear-local-preview", "local");
+      } else if (action === "confirm-clear-local-preview" && localPreview) {
+        await window.BPLocalPreview.clear();
+        filters = { query: "", type: "", status: "" };
+        homeFocusTarget = "";
+        document.querySelector("#real-dialog")?.close();
+        navigate("#home");
+        message("Dados da prévia local removidos.");
       } else if (action === "discard-draft") {
         const form = target.closest("form");
         if (!form || !window.confirm("Descartar o rascunho deste formulário? Esta ação não pode ser desfeita.")) return;
@@ -1531,7 +1658,7 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
         navigate("#meus-animais");
         message("Animal excluído.");
       } else if (action === "close-dialog") document.querySelector("#real-dialog").close();
-      else if (action === "delete-photo") confirmDialog("Excluir foto?", "A fotografia será removida do alerta e do Storage privado.", "confirm-delete-photo", target.dataset.id);
+      else if (action === "delete-photo") confirmDialog("Excluir foto?", localPreview ? "A fotografia será removida do alerta desta prévia local." : "A fotografia será removida do alerta e do Storage privado.", "confirm-delete-photo", target.dataset.id);
       else if (action === "confirm-delete-photo") {
         await D.deletePhoto(target.dataset.id);
         document.querySelector("#real-dialog").close();
@@ -1546,6 +1673,18 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (localPreview && event.target.matches("[data-admin-filter]")) {
+      const area = event.target.closest(".local-admin-area");
+      const values = Object.fromEntries([...area.querySelectorAll("[data-admin-filter]")].map((input) => [input.dataset.adminFilter, input.value.toLocaleLowerCase("pt-BR").trim()]));
+      let visible = 0;
+      for (const row of area.querySelectorAll("[data-admin-row]")) {
+        row.hidden = Boolean((values.query && !row.dataset.search?.includes(values.query)) || (values.status && row.dataset.status !== values.status) || (values.type && row.dataset.type !== values.type));
+        if (!row.hidden) visible++;
+      }
+      const empty = area.querySelector("[data-admin-empty]");
+      if (empty) empty.hidden = visible > 0;
+      return;
+    }
     if (event.target.id === "admin-moderation-query") {
       adminModeration.query = event.target.value;
       adminModeration.page = 1;
@@ -1594,6 +1733,13 @@ import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-
     }
   }
   function onChange(event) {
+    if (localPreview && event.target.matches("[data-admin-filter]")) return onInput(event);
+    if (event.target.matches?.(".file-picker-input")) queueMicrotask(() => {
+      const count = event.target.files?.length || 0;
+      const name = event.target.closest("label")?.querySelector(".file-picker-name");
+      if (name) name.textContent = count > 1 ? `${count} fotos selecionadas`
+        : count === 1 ? event.target.files[0].name : "Nenhuma foto selecionada";
+    });
     if (["admin-moderation-kind", "admin-moderation-status", "admin-moderation-order", "admin-moderation-from", "admin-moderation-to"].includes(event.target.id)) {
       const key = {
         "admin-moderation-kind": "kind", "admin-moderation-status": "status",

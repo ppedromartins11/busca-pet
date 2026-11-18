@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL?.trim();
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+const presentation = import.meta.env.MODE === "presentation";
+const url = presentation ? "" : import.meta.env.VITE_SUPABASE_URL?.trim();
+const publishableKey = presentation ? "" : import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 const configured = Boolean(url && publishableKey);
 
 const client = configured

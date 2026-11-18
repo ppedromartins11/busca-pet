@@ -53,6 +53,8 @@
     render();
     const dialog = document.querySelector("#accessibility-dialog");
     const trigger = document.querySelector(".accessibility-trigger");
+    const realHeader = document.querySelector(".app-shell.real-app .app-header");
+    if (realHeader) realHeader.insertBefore(trigger, realHeader.querySelector(".mobile-nav"));
     trigger.addEventListener("click", () => { opener = trigger; dialog.showModal(); dialog.querySelector("select")?.focus(); });
     dialog.addEventListener("close", () => opener?.focus());
     dialog.addEventListener("change", (event) => {

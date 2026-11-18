@@ -31,7 +31,15 @@ A autorização efetiva depende dos grants, das políticas RLS e das RPCs da mig
 
 O relato de visitante **sem conta** ainda depende de Cloudflare Worker, Turnstile e Edge Function, que não foram publicados. Denúncias e moderação têm código e migrations locais, mas dependem da aplicação dos contratos e de homologação no ambiente conectado; favoritos e tarefas continuam indisponíveis nesse modo. Nenhum dado fictício do protótipo é exibido como ocorrência remota.
 
-## Modo local de contingência
+## Prévia da interface moderna para apresentação
+
+Execute `npm.cmd run preview:local` e abra `http://127.0.0.1:5173/#home`. O comando isola o `.env` e abre a `BPRealApp` com dados somente neste navegador, sem conta real ou senha. Para outra porta: `npm.cmd run preview:local -- 5186`.
+
+Antes da apresentação, entre em **Minha conta → Limpar dados desta prévia** e confirme a exclusão. Na tela de entrada, escolha **Tutor Local**. Cadastre um animal com foto; publique um alerta de animal desaparecido e use **Marcar centro do mapa** com consentimento. Demonstre feed, busca, filtros, detalhe, mapa e avistamento. No detalhe do alerta, crie uma **denúncia de teste**. Saia, escolha **Administrador Local**, abra **Denúncias**, registre a decisão e confira o reflexo no feed e no mapa. Em **Ocorrências**, restaure a publicação e consulte o histórico. A lista textual do mapa continua disponível quando os blocos do OpenStreetMap não carregam. Use somente dados e fotos autorizados. A limpeza remove também denúncias, decisões e rascunhos locais; preferências de acessibilidade permanecem no dispositivo. Os perfis locais não são contas ou permissões do Supabase.
+
+Para gerar os mesmos fluxos como arquivos estáticos, execute `npm.cmd run build:presentation` e `npm.cmd run preview`. A Vercel usa esse build pelo `vercel.json`. O modo `presentation` ignora a configuração Supabase mesmo quando variáveis `VITE_SUPABASE_*` existem no ambiente; `npm.cmd run build` preserva o modo conectado para evolução posterior.
+
+## Modo local de contingência legado
 
 Para uma demonstração isolada, mesmo quando existe `.env` no checkout, execute `npm.cmd run demo`. O comando inicia o Vite em `127.0.0.1:5173` sem carregar o arquivo de ambiente do projeto; para outra porta, use `npm.cmd run demo -- 5180`. Confira o aviso de **protótipo local** antes de apresentar. As credenciais e os registros abaixo são fictícios e ficam somente no navegador.
 
