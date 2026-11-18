@@ -1,3 +1,7 @@
+import hexPhotoUrl from "../assets/hex.png";
+import boldPhotoUrl from "../assets/bold.png";
+import gargamelPhotoUrl from "../assets/gargamel.png";
+
 /* Componentes de apresentação reutilizados pelas telas da aplicação. */
 (() => {
   "use strict";
@@ -38,9 +42,9 @@
       '<circle cx="12" cy="12" r="9"/><path d="M15 8h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9M12 6v12"/>',
   });
   const demoPhotos = Object.freeze({
-    hex: "assets/hex.png",
-    bold: "assets/bold.png",
-    gargamel: "assets/gargamel.png",
+    hex: hexPhotoUrl,
+    bold: boldPhotoUrl,
+    gargamel: gargamelPhotoUrl,
   });
 
   function icon(name) {
