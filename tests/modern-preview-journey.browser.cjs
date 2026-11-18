@@ -16,6 +16,8 @@ const photo = fs.readFileSync(path.join(__dirname, "..", "assets", "hex.png"));
   try {
     for (const width of [390, 1440]) {
       const context = await browser.newContext({ viewport: { width, height: 900 } });
+      await context.grantPermissions(["geolocation"], { origin: new URL(base).origin });
+      await context.setGeolocation({ latitude: -20.4732, longitude: -54.615, accuracy: 25 });
       const page = await context.newPage();
       if (share) await page.goto(share);
       const errors = [];
@@ -67,7 +69,13 @@ const photo = fs.readFileSync(path.join(__dirname, "..", "assets", "hex.png"));
         await occurrence.locator('[name="region"]').fill("Centro");
         await occurrence.locator('[name="description"]').fill("Amora desapareceu perto da praça central. Tem pelagem caramelo.");
         await occurrence.locator('[name="reuse_pet_photos"]').check();
+        await occurrence.getByRole("button", { name: "Usar minha localização atual" }).click();
+        await occurrence.locator("#point-location-status").getByText("Mapa centralizado na sua posição.", { exact: false }).waitFor();
+        assert.match(await occurrence.locator("#point-location-status").innerText(), /Precisão estimada: 25 m/);
+        assert.match(await occurrence.locator("#point-selection-status").innerText(), /Nenhuma região marcada/);
         await occurrence.getByRole("button", { name: "Marcar centro do mapa" }).click();
+        assert.match(await occurrence.locator("#point-selection-status").innerText(), /Ponto escolhido/);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1), true);
         await occurrence.locator('[name="location_description"]').fill("Próximo à praça central");
         await occurrence.locator('[name="location_consent"]').check();
         await occurrence.locator('[name="rights"]').check();
