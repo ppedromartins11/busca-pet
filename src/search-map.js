@@ -111,22 +111,65 @@ export function createPointPicker(container, { initial = null, center = null, on
   map.setView(starting ? [starting.latitude, starting.longitude] : [-15.8, -51.9], starting ? 12 : 4);
   let marker = null;
   let circle = null;
+  let currentPositionMarker = null;
+  let currentPositionAccuracy = null;
+  let destroyed = false;
+
   const choose = ({ lat, lng }) => {
-    const latitude = Number(lat.toFixed(2));
-    const longitude = Number(lng.toFixed(2));
-    const position = [latitude, longitude];
-    if (marker) marker.setLatLng(position);
-    else marker = L.marker(position, { draggable: true, title: "Região aproximada escolhida" })
+    if (destroyed) return;
+    // Preserve the exact point while editing: rounding immediately made the marker jump
+    // hundreds of meters. Only the public area is rounded and persisted.
+    const chosenPosition = L.latLng(lat, lng);
+    const latitude = Number(chosenPosition.lat.toFixed(2));
+    const longitude = Number(chosenPosition.lng.toFixed(2));
+    const publicCenter = [latitude, longitude];
+    if (marker) marker.setLatLng(chosenPosition);
+    else marker = L.marker(chosenPosition, { draggable: true, title: "Ponto escolhido nesta tela" })
       .addTo(map).on("dragend", () => choose(marker.getLatLng()));
-    if (circle) circle.setLatLng(position);
-    else circle = L.circle(position, { radius: 900, color: "#683bb4", fillOpacity: 0.12 }).addTo(map);
+    if (circle) circle.setLatLng(publicCenter);
+    else circle = L.circle(publicCenter, { radius: 900, color: "#683bb4", fillOpacity: 0.12, interactive: false }).addTo(map);
     onChange?.({ latitude, longitude, radius_m: 900 });
   };
   map.on("click", (event) => choose(event.latlng));
   if (initial) choose({ lat: initial.latitude, lng: initial.longitude });
+
   return {
-    invalidateSize() { map.invalidateSize({ pan: false }); },
+    invalidateSize() { if (!destroyed) map.invalidateSize({ pan: false }); },
     chooseCenter() { choose(map.getCenter()); },
-    destroy() { map.remove(); },
+    locateCurrent({ onSuccess, onError } = {}) {
+      if (destroyed) return;
+      if (!window.isSecureContext || !navigator.geolocation) {
+        onError?.("A localização precisa de HTTPS e permissão do navegador. Você ainda pode escolher o ponto no mapa.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition((position) => {
+        if (destroyed) return;
+        const here = L.latLng(position.coords.latitude, position.coords.longitude);
+        const accuracy = Number.isFinite(position.coords.accuracy) ? Math.round(position.coords.accuracy) : null;
+        map.setView(here, accuracy !== null && accuracy <= 150 ? 16 : 14, { animate: false });
+        if (currentPositionMarker) currentPositionMarker.setLatLng(here);
+        else currentPositionMarker = L.circleMarker(here, {
+          radius: 8, color: "#ffffff", weight: 3, fillColor: "#2563eb",
+          fillOpacity: 1, interactive: false,
+        }).addTo(map);
+        if (currentPositionAccuracy) { currentPositionAccuracy.remove(); currentPositionAccuracy = null; }
+        if (accuracy !== null && accuracy > 0 && accuracy <= 2000) {
+          currentPositionAccuracy = L.circle(here, {
+            radius: accuracy, color: "#2563eb", weight: 1, fillOpacity: 0.07, interactive: false,
+          }).addTo(map);
+        }
+        // Merely centering never selects, publishes or stores the user's precise position.
+        onSuccess?.({ accuracy });
+      }, (error) => {
+        if (destroyed) return;
+        const description = error.code === 1
+          ? "Permissão de localização negada. Autorize no navegador ou selecione o lugar manualmente."
+          : error.code === 3
+            ? "A localização demorou demais. Tente novamente ou selecione o lugar no mapa."
+            : "Não foi possível obter sua localização. Verifique o GPS e tente novamente.";
+        onError?.(description);
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+    },
+    destroy() { destroyed = true; map.stop(); map.remove(); },
   };
 }
