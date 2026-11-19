@@ -149,7 +149,7 @@ import hexPhotoUrl from "../assets/hex.png";
   }
   function chrome(route) {
     const logged = Boolean(user());
-    const tutor = logged && (!localPreview || user()?.activeRole === "tutor");
+    const tutor = logged && (!localPreview || ["tutor", "administrador"].includes(user()?.activeRole));
     const admin = window.BPPermissions?.can("viewAdminDashboard");
     const moderator = window.BPPermissions?.can("moderate");
     const links = [
@@ -476,8 +476,7 @@ import hexPhotoUrl from "../assets/hex.png";
     if (ticket !== generation) return;
     if (!row) return unavailable("Alerta indisponível");
     const mine = row.is_owner === true;
-    const canReport = row.status === "active" && row.visibility === "public" && (!mine || localPreview)
-      && (!localPreview || user()?.activeRole !== "administrador");
+    const canReport = row.status === "active" && row.visibility === "public" && (!mine || localPreview);
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
     const reportLink = canReport
       ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
@@ -1233,7 +1232,6 @@ import hexPhotoUrl from "../assets/hex.png";
         return;
       }
       chrome(route === "map" ? "mapa" : route);
-      if (localPreview && user()?.activeRole === "administrador" && ["meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar"].includes(route)) return adminDenied();
       if (localPreview && route === "admin") return localAdminPage(id, detailId, ticket);
       if (route === "admin" && (["ocorrencias", "denuncias", "moderacao"].includes(id)
         ? !window.BPPermissions?.can("moderate")
