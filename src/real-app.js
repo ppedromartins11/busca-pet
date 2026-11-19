@@ -15,7 +15,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
+  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let homeFocusTarget = "";
@@ -151,6 +151,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   function chrome(route) {
     const logged = Boolean(user());
     const tutor = logged && (!localPreview || ["tutor", "administrador"].includes(user()?.activeRole));
+    const business = localPreview && logged && user()?.activeRole === "parceiro";
     const admin = window.BPPermissions?.can("viewAdminDashboard");
     const moderator = window.BPPermissions?.can("moderate");
     const links = [
@@ -158,6 +159,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
       ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(business ? [["minha-empresa", "Minha empresa", "heart"]] : []),
       ...(admin ? [["admin", "Administração", "user"]]
         : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
     ];
@@ -638,10 +640,54 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   const password = (name, label, autocomplete) => `<label>${label}<span class="password-control"><input class="control" type="password" name="${name}" autocomplete="${autocomplete}" required><button class="password-toggle" type="button" data-action="toggle-password" aria-label="Mostrar ${label.toLowerCase()}">Mostrar</button></span></label>`;
   function login() {
-    authPage("Entre no BuscaPet", "Acesse sua conta para acompanhar animais, alertas e avistamentos.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>${localPreview ? '<details class="presentation-accounts"><summary>Acessos para avaliação</summary><p><b>Tutor</b>: tutor@buscapet.test</p><p><b>Administração</b>: admin@buscapet.test</p><p>Senha das duas contas: <code>BuscaPet@2026</code></p><small>Ambiente de apresentação: os registros ficam apenas neste navegador; contas de teste não oferecem autenticação de servidor.</small></details>' : ""}`);
+    authPage("Entre no BuscaPet", "Acesse sua conta para acompanhar animais, alertas e avistamentos.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a>${localPreview ? '<a href="#cadastro-empresa">Cadastrar empresa</a>' : ""}</div></form>${localPreview ? '<details class="presentation-accounts"><summary>Acessos para avaliação</summary><p><b>Tutor</b>: tutor@buscapet.test</p><p><b>Administração</b>: admin@buscapet.test</p><p>Senha das duas contas: <code>BuscaPet@2026</code></p><small>Ambiente de apresentação: os registros ficam apenas neste navegador; contas de teste não oferecem autenticação de servidor.</small></details>' : ""}`);
   }
   function registration() {
-    authPage("Crie sua conta", "Cadastre-se para organizar suas buscas e acompanhar seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p>${localPreview ? '<p class="hint">Nesta apresentação, contas criadas e seus dados permanecem neste navegador. Não utilize uma senha pessoal.</p>' : ""}</form>`);
+    authPage("Crie sua conta", "Cadastre-se para organizar suas buscas e acompanhar seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p>${localPreview ? '<p class="auth-footer">Representa um negócio pet? <a href="#cadastro-empresa">Cadastre sua empresa</a></p>' : ""}${localPreview ? '<p class="hint">Nesta apresentação, contas criadas e seus dados permanecem neste navegador. Não utilize uma senha pessoal.</p>' : ""}</form>`);
+  }
+
+  const businessKinds = Object.freeze({
+    petshop: "Pet shop", veterinary: "Clínica veterinária", grooming: "Banho e tosa",
+    boarding: "Hospedagem e creche", training: "Adestramento", other: "Outros serviços pet",
+  });
+  function businessFields(row = {}) {
+    return `<div class="form-grid"><label class="full">Nome comercial *<input class="control" name="business_name" minlength="3" maxlength="100" value="${esc(row.name || "")}" required placeholder="Nome do estabelecimento"></label>
+      <label>Tipo de serviço *<select class="control" name="business_category" required>${Object.entries(businessKinds).map(([key, label]) => `<option value="${key}" ${row.category === key ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+      <label>Cidade *<input class="control" name="business_city" minlength="2" maxlength="80" value="${esc(row.city || "")}" required></label>
+      <label>Bairro *<input class="control" name="business_region" minlength="2" maxlength="100" value="${esc(row.region || "")}" required></label>
+      <label class="full">Endereço comercial *<input class="control" name="business_address" minlength="8" maxlength="200" value="${esc(row.address || "")}" required></label>
+      <label>Telefone comercial com DDD *<input class="control" name="business_phone" inputmode="tel" type="tel" maxlength="30" value="${esc((row.phone || "").replace(/^55/, ""))}" required placeholder="(67) 99999-9999"></label>
+      <label>Site (opcional)<input class="control" name="business_website" type="url" maxlength="200" value="${esc(row.website || "")}" placeholder="https://www.empresa.com.br"></label>
+      <label class="full">Serviços oferecidos *<textarea class="control" name="business_description" minlength="20" maxlength="500" required placeholder="Descreva os serviços que sua empresa oferece aos tutores.">${esc(row.description || "")}</textarea></label>
+      <label class="check-label full"><input type="checkbox" name="business_publish_consent" required><span>Autorizo a publicação do nome, endereço comercial, telefone, site e descrição do estabelecimento após aprovação.</span></label></div>`;
+  }
+  function businessFormData(form) {
+    return {
+      name: formValue(form, "business_name"), category: formValue(form, "business_category"),
+      city: formValue(form, "business_city"), region: formValue(form, "business_region"),
+      address: formValue(form, "business_address"), phone: formValue(form, "business_phone"),
+      website: formValue(form, "business_website"), description: formValue(form, "business_description"),
+      publishConsent: form.elements.business_publish_consent?.checked === true,
+    };
+  }
+  function businessSignup() {
+    if (!localPreview) return unavailable("Cadastro empresarial indisponível");
+    authPage("Cadastre sua empresa", "Crie uma conta comercial e divulgue seus serviços na Rede de Apoio após aprovação.",
+      `<form class="form auth-form" id="real-business-registration"><label>Nome do responsável *<input class="control" name="name" minlength="2" maxlength="80" required></label><label>E-mail de acesso *<input class="control" name="email" type="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}${password("passwordConfirmation", "Confirmar senha", "new-password")}${businessFields()}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button type="submit" class="btn primary">Solicitar cadastro empresarial</button><p class="hint">O cadastro é analisado pelo administrador e fica visível apenas após aprovação. Nesta versão de apresentação, os dados são compartilhados somente neste navegador; não use sua senha pessoal.</p><a href="#login">Já tenho conta</a></form>`);
+  }
+  async function myBusinessPage(ticket) {
+    if (!localPreview || user()?.activeRole !== "parceiro") return adminDenied();
+    const row = await D.getOwnBusiness();
+    if (ticket !== generation) return;
+    if (!row) return unavailable("Empresa não encontrada");
+    const statuses = { pending: "Em análise", approved: "Publicado", rejected: "Revisão necessária" };
+    const status = statuses[row.status] || "Em análise";
+    setPage(shell("Minha empresa", "Gerencie sua apresentação comercial na Rede de Apoio.",
+      `<section class="notice" role="status"><strong>Situação do cadastro: ${esc(status)}</strong><p>${row.status === "approved"
+      ? "Seu perfil comercial está na Rede de Apoio deste navegador."
+      : row.status === "pending" ? "Aguardando análise do administrador. Seu perfil ainda não aparece para visitantes."
+      : "Seu perfil precisa de ajustes para ser novamente aprovado."}</p>${row.review_reason ? `<p>Retorno da análise: ${esc(row.review_reason)}</p>` : ""}</section>
+      <form class="form form-page" id="real-business-profile">${businessFields(row)}<p class="form-error" role="alert"></p><button type="submit" class="btn primary">Salvar dados comerciais</button><p class="hint">Alterações enviam o perfil novamente para análise. Não use este cadastro para armazenar endereço residencial ou informações pessoais.</p></form><div class="actions"><a class="btn secondary" href="#services">Ver Rede de Apoio</a></div>`, true), "Minha empresa");
   }
   function forgot() {
     if (localPreview) return authPage("Recuperar acesso", "Informe o e-mail e o código de recuperação fornecido no cadastro.", '<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><label>Código de recuperação<input class="control" name="recovery_code" minlength="12" maxlength="12" autocomplete="off" required></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Continuar</button><a href="#login">Voltar ao login</a><p class="hint">A recuperação neste ambiente usa um código salvo apenas no dispositivo. Não há envio de e-mail. Contas de avaliação utilizam a senha fornecida no acesso.</p></form>');
