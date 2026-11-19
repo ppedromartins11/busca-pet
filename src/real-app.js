@@ -576,25 +576,22 @@ import hexPhotoUrl from "../assets/hex.png";
   }
   const password = (name, label, autocomplete) => `<label>${label}<span class="password-control"><input class="control" type="password" name="${name}" autocomplete="${autocomplete}" required><button class="password-toggle" type="button" data-action="toggle-password" aria-label="Mostrar ${label.toLowerCase()}">Mostrar</button></span></label>`;
   function login() {
-    if (localPreview) return authPage("Entrar na prévia local", "Escolha um perfil demonstrativo. Os dados ficam neste navegador; não há senha nem autenticação segura.", '<div class="actions"><button class="btn primary" type="button" data-action="enter-local-preview" data-role="tutor">Entrar como Tutor Local</button><button class="btn secondary" type="button" data-action="enter-local-preview" data-role="admin">Entrar como Administrador Local</button><a class="btn secondary" href="#home">Voltar</a></div><p class="hint">O Administrador Local não concede permissões no Supabase.</p>');
-    authPage("Entre no BuscaPet", "Use seu e-mail e senha.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>`);
+    authPage("Entre no BuscaPet", "Acesse sua conta para acompanhar animais, alertas e avistamentos.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>${localPreview ? '<details class="presentation-accounts"><summary>Acessos para avaliação</summary><p><b>Tutor</b>: tutor@buscapet.test</p><p><b>Administração</b>: admin@buscapet.test</p><p>Senha das duas contas: <code>BuscaPet@2026</code></p><small>Ambiente de apresentação: os registros ficam apenas neste navegador; contas de teste não oferecem autenticação de servidor.</small></details>' : ""}`);
   }
   function registration() {
-    if (localPreview) return authPage("Cadastro indisponível na prévia", "Contas reais exigem Supabase. Para explorar os fluxos sem senha, entre na prévia local.", '<a class="btn primary" href="#login">Entrar na prévia local</a>');
-    authPage("Crie sua conta", "Uma Conta BuscaPet permite publicar alertas, registrar avistamentos e cuidar dos seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p></form>`);
+    authPage("Crie sua conta", "Cadastre-se para organizar suas buscas e acompanhar seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p>${localPreview ? '<p class="hint">Nesta apresentação, contas criadas e seus dados permanecem neste navegador. Não utilize uma senha pessoal.</p>' : ""}</form>`);
   }
   function forgot() {
-    if (localPreview) return authPage("Recuperação indisponível na prévia", "A prévia local não cria contas nem armazena senhas.", '<a class="btn primary" href="#login">Voltar à prévia local</a>');
+    if (localPreview) return authPage("Recuperar acesso", "Informe o e-mail e o código de recuperação fornecido no cadastro.", '<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><label>Código de recuperação<input class="control" name="recovery_code" minlength="12" maxlength="12" autocomplete="off" required></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Continuar</button><a href="#login">Voltar ao login</a><p class="hint">A recuperação neste ambiente usa um código salvo apenas no dispositivo. Não há envio de e-mail. Contas de avaliação utilizam a senha fornecida no acesso.</p></form>');
     authPage("Recuperar senha", "Se houver uma conta para este e-mail, enviaremos instruções.", `<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><p class="form-error" role="alert"></p><p class="form-success" role="status"></p><button class="btn primary" type="submit">Enviar instruções</button><a href="#login">Voltar ao login</a></form>`);
   }
   function reset() {
-    if (localPreview) return forgot();
-    if (!A.canResetPassword?.()) return authPage("Link indisponível", "Solicite um novo link de recuperação.", '<a class="btn primary" href="#esqueci-senha">Solicitar novo link</a>');
+    if (!A.canResetPassword?.()) return authPage("Link indisponível", "Solicite uma nova recuperação de acesso.", '<a class="btn primary" href="#esqueci-senha">Recuperar acesso</a>');
     authPage("Definir nova senha", "Escolha uma nova senha para sua conta.", `<form class="form auth-form" id="real-reset">${password("password", "Nova senha", "new-password")}${password("passwordConfirmation", "Confirmação", "new-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar nova senha</button></form>`);
   }
   function verifyEmail() {
-    if (localPreview) return registration();
-    authPage("Confirme seu e-mail", "Abra a mensagem enviada pelo Supabase Auth e depois entre na conta.", `<p class="notice">Se não encontrar a mensagem, confira o spam e a configuração de e-mail do projeto.</p><div class="actions"><button class="btn secondary" data-action="resend-email">Reenviar confirmação</button><a class="btn primary" href="#login">Voltar ao login</a></div>`);
+    if (localPreview) return authPage("Conta criada", "Seu cadastro foi concluído. Entre com seu e-mail e senha.", '<a class="btn primary" href="#login">Ir para o login</a>');
+    authPage("Confirme seu e-mail", "Abra a mensagem de confirmação enviada para seu endereço de e-mail.", `<p class="notice">Não encontrou a mensagem? Confira a caixa de spam ou solicite outro envio.</p><div class="actions"><button class="btn secondary" data-action="resend-email">Reenviar confirmação</button><a class="btn primary" href="#login">Voltar ao login</a></div>`);
   }
   async function pets(ticket) {
     const rows = await D.listOwnPets();
@@ -1409,17 +1406,28 @@ import hexPhotoUrl from "../assets/hex.png";
       } else if (form.id === "real-login") {
         await A.signIn(formValue(form, "email"), formValue(form, "password"));
         message("Entrada realizada.");
-        navigate(returnAfterLogin());
+        navigate(localPreview && user()?.activeRole === "administrador" ? "#admin" : returnAfterLogin());
       } else if (form.id === "real-registration") {
         const passwordValue = formValue(form, "password");
         if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation")) throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
         verificationEmail = formValue(form, "email");
         const result = await A.signUp({ name: formValue(form, "name"), email: verificationEmail, password: passwordValue, passwordConfirmation: formValue(form, "passwordConfirmation"), roles: ["tutor"], activeRole: "tutor", acceptTerms: true, acceptPrivacy: true });
-        notice = result.needsEmailConfirmation ? "Confira seu e-mail para ativar a conta." : "Conta criada.";
-        navigate(result.needsEmailConfirmation ? "#verificar-email" : "#painel-tutor");
+        if (localPreview) {
+          notice = `Conta criada! Anote seu código de recuperação (exibido apenas agora): ${result.recoveryCode}. Faça login para continuar.`;
+          navigate("#login");
+        } else {
+          notice = result.needsEmailConfirmation ? "Confira seu e-mail para ativar a conta." : "Conta criada.";
+          navigate(result.needsEmailConfirmation ? "#verificar-email" : "#painel-tutor");
+        }
       } else if (form.id === "real-forgot") {
-        await A.requestPasswordReset(formValue(form, "email"));
-        form.querySelector(".form-success").textContent = "Se houver uma conta para este e-mail, as instruções foram enviadas.";
+        if (localPreview) {
+          await A.requestPasswordReset(formValue(form, "email"), formValue(form, "recovery_code"));
+          notice = "Código confirmado. Defina sua nova senha.";
+          navigate("#redefinir-senha");
+        } else {
+          await A.requestPasswordReset(formValue(form, "email"));
+          form.querySelector(".form-success").textContent = "Se houver uma conta para este e-mail, as instruções foram enviadas.";
+        }
       } else if (form.id === "real-reset") {
         await A.updatePassword(formValue(form, "password"), formValue(form, "passwordConfirmation"));
         history.replaceState({}, "", location.pathname + "#login");
