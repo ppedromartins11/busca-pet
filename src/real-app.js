@@ -522,11 +522,15 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     if (!row) return unavailable("Alerta indisponível");
     const mine = row.is_owner === true;
     const canReport = row.status === "active" && row.visibility === "public" && (!mine || localPreview);
+    const contactAvailable = localPreview && row.status === "active" && row.visibility === "public"
+      && row.contact_enabled && /^55\d{10,11}$/.test(row.contact_whatsapp || "") && !mine;
+    const contactAction = contactAvailable
+      ? `<a class="btn primary" href="${url("contato", id)}">Tenho informações · Contatar tutor</a>` : "";
     const nextStates = row.status === "active" ? ["located", "reunited", "closed"] : ["active"];
     const reportLink = canReport
       ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
       : "";
-    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${contactAction}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
     if (localPreview && row.visibility === "under_review") {
       const visibility = document.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
       if (visibility) visibility.textContent = "Oculta para moderação";
@@ -546,6 +550,21 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     });
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
+  }
+  async function contactPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Contato indisponível");
+    const occurrence = await D.getOccurrence(id);
+    if (ticket !== generation) return;
+    if (!occurrence || occurrence.visibility !== "public" || occurrence.status !== "active")
+      return unavailable("Contato indisponível");
+    if (!occurrence.contact_enabled || !/^55\d{10,11}$/.test(occurrence.contact_whatsapp || ""))
+      return setPage(shell("Contato indisponível", "O responsável não habilitou contato direto para este alerta.",
+        `<a class="btn secondary" href="${url("pet", id)}">Voltar ao alerta</a>`, true));
+    if (occurrence.owner_id === user()?.id)
+      return setPage(shell("Este alerta é seu", "Seu WhatsApp está habilitado para receber pistas.",
+        `<a class="btn secondary" href="${url("pet", id)}">Voltar ao alerta</a>`, true));
+    setPage(shell("Tenho informações sobre este animal", "Descreva primeiro o que você viu. Assim o tutor recebe uma mensagem com dados úteis.",
+      `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><form class="form form-page" id="real-contact-form" data-id="${esc(id)}"><label>Quando você viu o animal? *<input class="control" type="datetime-local" name="observed_at" value="${nowLocal()}" max="${nowLocal()}" required></label><label>Em qual bairro ou ponto de referência? *<input class="control" name="area" minlength="5" maxlength="120" required placeholder="Ex.: perto da praça, bairro Centro"></label><label>O que você observou? *<textarea class="control" name="description" minlength="20" maxlength="600" required placeholder="Descreva aparência, direção e outras informações úteis."></textarea></label><label class="check-label"><input type="checkbox" name="real_information" required><span>Confirmo que tenho uma informação concreta sobre este animal, não apenas uma dúvida.</span></label><input type="text" name="website" tabindex="-1" autocomplete="off" hidden><p class="form-error" role="alert"></p><button type="submit" class="btn primary">Preparar mensagem ao tutor</button><p class="hint">O WhatsApp só será aberto após conferir o relato. A mensagem não é enviada automaticamente. Não divulgue informações pessoais desnecessárias.</p></form><div id="contact-result" role="status" aria-live="polite"></div>`, true), "Informar avistamento");
   }
   async function reportOccurrencePage(id, ticket) {
     if (!UUID.test(id)) return unavailable("Alerta indisponível para denúncia");
@@ -679,7 +698,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     if (ticket !== generation) return;
     if (id && (!row || row.is_owner !== true)) return unavailable("Alerta indisponível");
     const kind = row?.type || (type === "found" ? "found" : "lost");
-    setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label><label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Adicionar fotos cadastradas do meu animal a este alerta.</span></label><p class="hint full">A confirmação associa até cinco fotos do animal a este alerta. Elas só aparecem no feed se o alerta for público.</p><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
+    setPage(shell(id ? "Editar alerta" : types[kind], "Escolha um animal para reaproveitar os dados e as fotos autorizadas.", `<form class="form form-page" id="real-occurrence-form" data-id="${esc(id || "")}"><input type="hidden" name="type" value="${kind}"><div class="form-grid"><label>Animal vinculado<select class="control" name="pet_id" id="occurrence-pet"><option value="">Sem vínculo</option>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === row?.pet_id ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label><p class="hint" id="occurrence-pet-hint">O animal precisa pertencer à sua conta. <a href="#novo-animal">Cadastrar animal</a></p><label>Cidade *<input class="control" name="city" value="${esc(row?.city || "")}" maxlength="80" required></label><label>Bairro ou região *<input class="control" name="region" value="${esc(row?.region || "")}" maxlength="100" required></label><label>Referência pública aproximada<input class="control" name="public_reference" value="${esc(row?.public_reference || "")}" maxlength="200"></label><label>Data e hora *<input class="control" type="datetime-local" name="last_seen_at" value="${row?.last_seen_at ? esc(new Date(new Date(row.last_seen_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : nowLocal()}" max="${nowLocal()}" required></label><label>Recompensa opcional (R$)<input class="control" type="number" min="0" max="1000000" step="0.01" name="reward" value="${row ? (row.reward_cents / 100).toFixed(2) : ""}"></label><label class="full">Descrição *<textarea class="control" name="description" minlength="10" maxlength="2000" required>${esc(row?.description || "")}</textarea></label>${localPreview ? `<label class="full">WhatsApp para receber pistas (opcional)<input class="control" name="contact_whatsapp" type="tel" autocomplete="tel" inputmode="tel" maxlength="22" placeholder="(67) 99999-9999" value="${esc(row?.contact_whatsapp ? row.contact_whatsapp.replace(/^55/, "") : "")}"><span class="hint">Informe um número brasileiro com DDD. Não será mostrado diretamente na página.</span></label><label class="check-label full"><input type="checkbox" name="contact_enabled" ${row?.contact_enabled ? "checked" : ""}><span>Autorizo que pessoas com pistas reais abram uma conversa comigo pelo WhatsApp após preencher o formulário.</span></label>` : ""}<label>Visibilidade<select class="control" name="visibility" ${id ? "disabled" : ""}><option value="public" ${row?.visibility !== "private" ? "selected" : ""}>Pública</option><option value="private" ${row?.visibility === "private" ? "selected" : ""}>Privada</option></select></label><label class="check-label full"><input type="checkbox" name="reuse_pet_photos"><span>Adicionar fotos cadastradas do meu animal a este alerta.</span></label><p class="hint full">A confirmação associa até cinco fotos do animal a este alerta. Elas só aparecem no feed se o alerta for público.</p><label class="full">Foto adicional opcional<input class="control" type="file" name="photo" accept="image/jpeg,image/png,image/webp"><span class="hint">JPEG, PNG ou WebP, até 5 MiB. A foto é reprocessada para remover metadados antes do envio.</span></label></div><label class="check-label"><input type="checkbox" name="rights" required><span>Confirmo que posso usar as informações e a foto.</span></label><p class="form-error" role="alert"></p><div class="actions"><button class="btn primary" type="submit">${id ? "Salvar alterações" : "Publicar alerta"}</button><a class="btn secondary" href="${id ? url("pet", id) : "#home"}">Cancelar</a></div></form>`, true), id ? "Editar alerta" : types[kind]);
     const grid = document.querySelector("#real-occurrence-form .form-grid");
     if (kind === "lost" && grid) {
       grid.insertAdjacentHTML("beforeend", pointPickerMarkup("occurrence"));
@@ -1291,6 +1310,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "services") servicesPage();
       else if (route === "pet") await detail(id, ticket);
       else if (route === "denunciar") await reportOccurrencePage(id, ticket);
+      else if (route === "contato") await contactPage(id, ticket);
       else if (route === "login") login();
       else if (route === "registro") registration();
       else if (route === "esqueci-senha") forgot();
@@ -1422,6 +1442,47 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       await loadAdminOccurrences(generation);
       return;
     }
+    if (form.id === "real-contact-form" && localPreview) {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      await busy(form, async () => {
+        if (formValue(form, "website")) throw Error("Não foi possível validar a solicitação.");
+        const id = form.dataset.id;
+        const row = await D.getOccurrence(id);
+        if (!row || row.visibility !== "public" || row.status !== "active" || !row.contact_enabled
+          || !/^55\d{10,11}$/.test(row.contact_whatsapp || ""))
+          throw Error("Este contato não está mais disponível.");
+        const seenAt = new Date(formValue(form, "observed_at"));
+        if (!Number.isFinite(seenAt.getTime()) || seenAt.getTime() > Date.now() + 60000)
+          throw Error("Informe uma data e hora válidas.");
+        const area = formValue(form, "area");
+        const description = formValue(form, "description");
+        if (area.length < 5 || description.length < 20)
+          throw Error("Preencha os detalhes da pista antes de continuar.");
+        const key = "bp.contact-attempts.v1";
+        const data = JSON.parse(localStorage.getItem(key) || "{}");
+        const current = Date.now();
+        const attempts = (Array.isArray(data[id]) ? data[id] : []).filter((time) =>
+          Number.isFinite(time) && current - time < 86400000 && current >= time);
+        if (attempts.length >= 3 || attempts.some((time) => current - time < 600000))
+          throw Error("Limite de contatos neste navegador atingido. Aguarde antes de preparar outra mensagem.");
+        const messageText = [
+          "Olá! Encontrei seu alerta no BuscaPet e tenho uma pista.",
+          `Alerta: ${row.type === "lost" ? "Animal desaparecido" : "Animal encontrado"} em ${row.region}, ${row.city}.`,
+          `Quando vi: ${seenAt.toLocaleString("pt-BR")}.`,
+          `Onde: ${area}.`, `Observação: ${description}`,
+          "Podemos conferir se é o mesmo animal?",
+        ].join("\n");
+        const whatsapp = "https://wa.me/" + row.contact_whatsapp
+          + "?text=" + encodeURIComponent(messageText);
+        attempts.push(current);
+        data[id] = attempts;
+        localStorage.setItem(key, JSON.stringify(data));
+        const result = document.querySelector("#contact-result");
+        if (result) result.innerHTML = `<p class="notice">Mensagem pronta. Confirme o envio no WhatsApp para que o tutor receba a pista.</p><a class="btn primary" target="_blank" rel="noopener noreferrer" href="${esc(whatsapp)}">Abrir WhatsApp e enviar pista</a>`;
+      });
+      return;
+    }
     if (form.id === "real-occurrence-report-form") {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -1495,6 +1556,16 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         const amount = Number(formValue(form, "reward") || 0);
         if (!Number.isFinite(amount) || amount < 0 || amount > 1000000) throw Error("Recompensa inválida.");
         const data = { pet_id: formValue(form, "pet_id") || null, city: formValue(form, "city"), region: formValue(form, "region"), public_reference: formValue(form, "public_reference"), last_seen_at: new Date(formValue(form, "last_seen_at")).toISOString(), description: formValue(form, "description"), reward_cents: Math.round(amount * 100) };
+        if (localPreview) {
+          const rawPhone = formValue(form, "contact_whatsapp").replace(/\D/g, "");
+          const enabled = form.elements.contact_enabled?.checked === true;
+          const national = rawPhone.startsWith("55") && [12, 13].includes(rawPhone.length)
+            ? rawPhone.slice(2) : rawPhone;
+          if (enabled && !/^\d{10,11}$/.test(national))
+            throw Error("Informe um WhatsApp válido com DDD ou desmarque a autorização de contato.");
+          data.contact_whatsapp = enabled ? "55" + national : null;
+          data.contact_enabled = enabled;
+        }
         if (!form.dataset.id) { data.type = formValue(form, "type"); data.visibility = formValue(form, "visibility"); }
         const selected = form.elements.photo.files?.[0];
         const file = selected ? await preparePhoto(selected) : null;
