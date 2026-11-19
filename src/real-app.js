@@ -150,7 +150,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   function chrome(route) {
     const logged = Boolean(user());
-    const tutor = logged && (!localPreview || ["tutor", "administrador"].includes(user()?.activeRole));
+    const tutor = logged && (!localPreview || ["tutor", "administrador", "parceiro"].includes(user()?.activeRole));
     const business = localPreview && logged && user()?.activeRole === "parceiro";
     const admin = window.BPPermissions?.can("viewAdminDashboard");
     const moderator = window.BPPermissions?.can("moderate");
