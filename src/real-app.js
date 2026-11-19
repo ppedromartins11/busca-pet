@@ -272,7 +272,7 @@ import hexPhotoUrl from "../assets/hex.png";
       const lists = mapListHtml(mapPoints);
       document.querySelector("#map-timeline-events").innerHTML = lists.timeline;
       document.querySelector("#map-text-points").innerHTML = lists.list;
-      status.textContent = `${mapPoints.length} ${localPreview ? (mapPoints.length === 1 ? "ponto desta prévia" : "pontos desta prévia") : (mapPoints.length === 1 ? "ponto publicado" : "pontos publicados")}`;
+      status.textContent = `${mapPoints.length} ${localPreview ? (mapPoints.length === 1 ? "ponto no mapa" : "pontos no mapa") : (mapPoints.length === 1 ? "ponto publicado" : "pontos publicados")}`;
     } catch (error) {
       if (request !== mapQueryGeneration || mapController !== controller) return;
       status.textContent = error?.code === "NOT_PUBLISHED" || error?.code === "UNAVAILABLE"
@@ -719,7 +719,7 @@ import hexPhotoUrl from "../assets/hex.png";
       const hidden = data.occurrences.filter((row) => row.visibility === "under_review");
       content = `<div class="admin-content-heading"><h2>Central de moderação</h2><p>${pendingReports.length} ${pendingReports.length === 1 ? "denúncia pendente" : "denúncias pendentes"} · ${hidden.length} ${hidden.length === 1 ? "publicação oculta" : "publicações ocultas"}.</p></div><div class="local-admin-filters"><label>Buscar<input class="control" data-admin-filter="query" placeholder="Buscar item"></label><label>Tipo<select class="control" data-admin-filter="type"><option value="">Todos</option><option value="report">Denúncia</option><option value="occurrence">Ocorrência</option></select></label></div>${pendingReports.map((row) => `<div data-admin-row data-type="report" data-search="${esc(`${row.category} ${row.description}`.toLowerCase())}">${reportItem(row)}</div>`).join("")}${hidden.map((row) => `<div data-admin-row data-type="occurrence" data-search="${esc(label(row).toLowerCase())}">${occurrenceItem(row)}</div>`).join("")}${!pendingReports.length && !hidden.length ? '<p class="hint">Nenhum item aguardando moderação.</p>' : ""}<p class="hint" data-admin-empty hidden>Nenhum item corresponde aos filtros.</p>${history}`;
     } else return unavailable("Página administrativa indisponível");
-    setPage(`<main class="admin-area local-admin-area" aria-label="Administração demonstrativa">${header}<div class="admin-layout">${nav}<section class="admin-content">${content}</section></div></main>`, "Administração Local");
+    setPage(`<main class="admin-area local-admin-area" aria-label="Administração">${header}<div class="admin-layout">${nav}<section class="admin-content">${content}</section></div></main>`, "Administração");
   }
   const adminRoleLabels = Object.freeze({ tutor: "Tutor", colaborador: "Colaborador", parceiro: "Parceiro", moderador: "Moderador", administrador: "Administrador" });
   function adminNavigation(active) {
@@ -1192,7 +1192,7 @@ import hexPhotoUrl from "../assets/hex.png";
   }
   function renderAccount() {
     const current = user();
-    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", '<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : "Tutor"}</dd></div></dl><div class="actions"><button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>', true), "Minha conta");
+    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : "Tutor"}</dd></div></dl><div class="actions"><button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>`, true), "Minha conta");
     setPage(shell("Minha conta", "Dados da sua Conta BuscaPet.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Tipo de conta</dt><dd>Conta BuscaPet</dd></div></dl><div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">As permissões sensíveis são verificadas no servidor. Recursos administrativos não são exibidos nesta versão.</p>`, true), "Minha conta");
   }
   function account() {
