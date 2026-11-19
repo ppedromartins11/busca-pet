@@ -484,9 +484,6 @@ import hexPhotoUrl from "../assets/hex.png";
       const visibility = document.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
       if (visibility) visibility.textContent = "Oculta para moderação";
     }
-    if (localPreview && mine && row.status === "active" && row.visibility === "public") {
-      document.querySelector(".detail-layout .actions")?.insertAdjacentHTML("beforeend", `<a class="btn secondary" href="${url("avistamento", id)}">Registrar avistamento</a>`);
-    }
     const mapState = document.createElement("section");
     mapState.className = "occurrence-map-state";
     mapState.innerHTML = '<h2 class="section-heading">Região no mapa</h2><p>Verificando região publicada…</p>';
