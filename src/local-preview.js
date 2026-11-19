@@ -32,7 +32,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     const pet = (id, name, coat, size) => ({
       id, owner_id: USER_ID, name, species: "dog", breed: "Sem raça definida",
       sex: "unknown", size, coat_description: coat,
-      distinctive_features: "Animal cadastrado para a apresentação do BuscaPet.",
+      distinctive_features: name === "Hex" ? "Dócil, atende pelo nome e costuma usar coleira." : name === "Bold" ? "Pelagem escura, porte médio e orelhas levantadas." : "Porte pequeno, pelagem curta e comportamento tranquilo.",
       created_at: ago(24), updated_at: ago(3),
     });
     const occurrence = (id, petId, type, status, city, region, reference, description, days) => ({
@@ -48,6 +48,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       ...initial(),
       demoExamplesVersion: 1,
       careDemoVersion: 1,
+      copyPolishVersion: 1,
       careEvents: [
         { id: "70000000-0000-4000-8000-000000000001", owner_id: USER_ID, pet_id: ids.hex,
           title: "Revisar a carteira de vacinação", category: "vaccination",
@@ -65,11 +66,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       ],
       occurrences: [
         occurrence(ids.lost, ids.hex, "lost", "active", "Campo Grande", "Carandá Bosque",
-          "Próximo ao Parque das Nações Indígenas", "Hex desapareceu na região do parque. É dócil e pode estar assustado. Alerta fictício para apresentação.", 2),
+          "Próximo ao Parque das Nações Indígenas", "Hex desapareceu nas proximidades do parque. É dócil e pode estar assustado. Se tiver informações, registre um avistamento.", 2),
         occurrence(ids.found, ids.bold, "found", "active", "Campo Grande", "Centro",
-          "Proximidades da Praça Ary Coelho", "Um cão foi encontrado na região central. Procuramos a família responsável. Registro fictício para apresentação.", 4),
+          "Proximidades da Praça Ary Coelho", "Cão encontrado na região central. Estamos procurando a família responsável. Confira as características antes de entrar em contato.", 4),
         occurrence(ids.reunited, ids.gargamel, "lost", "reunited", "Campo Grande", "Amambai",
-          "Região da Orla Morena", "Gargamel foi localizado e voltou para casa. Exemplo de busca encerrada com sucesso.", 9),
+          "Região da Orla Morena", "Gargamel foi localizado e está novamente com sua família. A busca foi encerrada.", 9),
       ],
       petPhotos: [
         photo("40000000-0000-4000-8000-000000000001", "pet_id", ids.hex, "hex"),
@@ -103,10 +104,43 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       reports: [
         { id: "60000000-0000-4000-8000-000000000001", occurrence_id: ids.found,
           reporter_id: USER_ID, category: "other",
-          description: "Denúncia fictícia para demonstrar a análise e a moderação de alertas.",
+          description: "Solicitação de análise do anúncio: verificar se as informações publicadas estão completas.",
           report_status: "open", created_at: ago(0.7), test_record: true },
       ],
     };
+  };
+  const originalDemoDescriptions = new Map([
+    ["20000000-0000-4000-8000-000000000001", [
+      "Hex desapareceu na região do parque. É dócil e pode estar assustado. Alerta fictício para apresentação.",
+      "Hex desapareceu nas proximidades do parque. É dócil e pode estar assustado. Se tiver informações, registre um avistamento.",
+    ]],
+    ["20000000-0000-4000-8000-000000000002", [
+      "Um cão foi encontrado na região central. Procuramos a família responsável. Registro fictício para apresentação.",
+      "Cão encontrado na região central. Estamos procurando a família responsável. Confira as características antes de entrar em contato.",
+    ]],
+    ["20000000-0000-4000-8000-000000000003", [
+      "Gargamel foi localizado e voltou para casa. Exemplo de busca encerrada com sucesso.",
+      "Gargamel foi localizado e está novamente com sua família. A busca foi encerrada.",
+    ]],
+  ]);
+  const improveDemoText = (data) => {
+    for (const row of data.occurrences) {
+      const [old, next] = originalDemoDescriptions.get(row.id) || [];
+      if (old && row.description === old) row.description = next;
+    }
+    for (const pet of data.pets) {
+      if (pet.distinctive_features === "Animal cadastrado para a apresentação do BuscaPet.") {
+        pet.distinctive_features = pet.name === "Hex"
+          ? "Dócil, atende pelo nome e costuma usar coleira."
+          : pet.name === "Bold" ? "Pelagem escura, porte médio e orelhas levantadas."
+            : "Porte pequeno, pelagem curta e comportamento tranquilo.";
+      }
+    }
+    for (const report of data.reports) {
+      if (report.id === "60000000-0000-4000-8000-000000000001"
+        && report.description === "Denúncia fictícia para demonstrar a análise e a moderação de alertas.")
+        report.description = "Solicitação de análise do anúncio: verificar se as informações publicadas estão completas.";
+    }
   };
   const read = () => {
     try {
@@ -137,6 +171,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
         const existing = new Set(data.careEvents.map((event) => event.id));
         data.careEvents.push(...examples.filter((event) => ids.has(event.pet_id) && !existing.has(event.id)));
         data.careDemoVersion = 1;
+        localStorage.setItem(KEY, JSON.stringify(data));
+      }
+      if (data.copyPolishVersion !== 1) {
+        improveDemoText(data);
+        data.copyPolishVersion = 1;
         localStorage.setItem(KEY, JSON.stringify(data));
       }
       return data;
@@ -732,7 +771,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
       request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
-    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1, careDemoVersion: 1 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1, careDemoVersion: 1, copyPolishVersion: 1 }));
     sessionStorage.removeItem(SESSION);
     sessionStorage.removeItem(SESSION_ID);
     sessionStorage.removeItem(RESET_ID);
