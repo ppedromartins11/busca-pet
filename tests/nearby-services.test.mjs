@@ -53,8 +53,8 @@ test("consulta geolocalizada ordena os retornos pelo mais proximo", async () => 
       async json() {
         return {
           elements: [
-            { lat: -20.50, lon: -54.6, tags: { name: "Mais longe", shop: "pet" } },
-            { lat: -20.4501, lon: -54.6, tags: { name: "Mais perto", amenity: "veterinary" } },
+            { lat: -20.50, lon: -54.6, tags: { name: "Mais longe", shop: "pet", phone: "+55 67 3399-0000" } },
+            { lat: -20.4501, lon: -54.6, tags: { name: "Mais perto", amenity: "veterinary", phone: "+55 67 3399-1111" } },
           ],
         };
       },
