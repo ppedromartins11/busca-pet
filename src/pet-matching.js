@@ -48,3 +48,5 @@ export function possibleMatches(reference, occurrences, pets, limit = 6) {
       || String(b.occurrence.last_seen_at).localeCompare(String(a.occurrence.last_seen_at)))
     .slice(0, limit);
 }
+
+if (typeof window !== "undefined") window.BPMatch = Object.freeze({ possibleMatches });
