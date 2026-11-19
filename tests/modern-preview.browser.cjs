@@ -35,20 +35,20 @@ const chrome = process.env.CHROME_PATH || [
     });
     assert.equal(await page.evaluate(() => window.BPLocalPreview?.active), true);
     assert.equal(await page.evaluate(() => window.BPSupabase.configured), false);
-    assert.match(await page.locator(".demo-strip").innerText(), /somente neste navegador/);
+    assert.equal(await page.locator(".demo-strip").count(), 0);
     await page.waitForFunction(() => {
       const illustration = document.querySelector(".hero-pet > img");
       return illustration?.complete && illustration.naturalWidth > 0;
     }, undefined, { timeout: 10000 });
 
-    assert.equal(await page.locator(".demo-strip").isVisible(), true);
+    assert.equal(await page.locator(".demo-strip").count(), 0);
 
     for (const width of [320, 360, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const [route, heading] of Object.entries({
         home: "Vamos trazer seu pet de volta.", mapa: "Mapa da busca", services: "Rede de apoio",
-        login: "Entrar na prévia local", registro: "Cadastro indisponível na prévia",
-        "esqueci-senha": "Recuperação indisponível na prévia", sobre: "Sobre o BuscaPet",
+        login: "Entre no BuscaPet", registro: "Crie sua conta",
+        "esqueci-senha": "Recuperar acesso", sobre: "Sobre o BuscaPet",
         termos: "Termos de Uso", privacidade: "Privacidade",
       })) {
         await page.goto(`${base}/#${route}`);
@@ -71,7 +71,9 @@ const chrome = process.env.CHROME_PATH || [
     }
 
     await page.goto(base + "/#login");
-    await page.getByRole("button", { name: "Entrar como Tutor Local" }).click();
+    await page.locator("#real-login [name=\"email\"]").fill("tutor@buscapet.test");
+        await page.locator("#real-login [name=\"password\"]").fill("BuscaPet@2026");
+        await page.locator("#real-login").getByRole("button", { name: "Entrar", exact: true }).click();
     await page.getByRole("heading", { name: "Minha Área" }).waitFor();
     for (const width of [320, 360, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -162,7 +164,7 @@ const chrome = process.env.CHROME_PATH || [
     await lost.getByRole("button", { name: "Publicar alerta" }).click();
     await page.getByRole("heading", { name: "Animal desaparecido", exact: true }).waitFor();
     await page.goto(base + "/#mapa");
-    await page.locator("#map-results-status").getByText("1 ponto desta prévia").waitFor();
+    await page.locator("#map-results-status").getByText("1 ponto no mapa").waitFor();
     await page.locator('[data-map-filter="last-known"]').uncheck();
     assert.equal(await page.locator(".bp-map-icon.last-known").count(), 0);
     for (const width of [320, 360, 390, 768, 1024, 1440]) {
@@ -177,8 +179,8 @@ const chrome = process.env.CHROME_PATH || [
         ["admin/ocorrencias", "Acesso negado"],
         ["admin/denuncias", "Acesso negado"],
         ["admin/moderacao", "Acesso negado"],
-        ["verificar-email", "Cadastro indisponível na prévia"],
-        ["redefinir-senha", "Recuperação indisponível na prévia"],
+        ["verificar-email", "Crie sua conta"],
+        ["redefinir-senha", "Recuperar acesso"],
       ]) {
         await page.goto(`${base}/#${route}`);
         await page.getByRole("heading", { name: heading }).waitFor();
@@ -210,8 +212,8 @@ const chrome = process.env.CHROME_PATH || [
 
     await page.goto(base + "/#minha-conta");
     await page.getByRole("heading", { name: "Minha conta" }).waitFor();
-    await page.getByRole("button", { name: "Sair da prévia" }).click();
-    await page.getByRole("heading", { name: "Entrar na prévia local" }).waitFor();
+    await page.getByRole("button", { name: "Sair" }).click();
+    await page.getByRole("heading", { name: "Entre no BuscaPet" }).waitFor();
     assert.equal(remote.length, 0);
     assert.deepEqual(errors, []);
     console.log("Modern preview: 174 route/width checks and local pet, photo, occurrence, map, sighting, search, edit, removal, reload, menu, theme, dialog, logout passed.");
