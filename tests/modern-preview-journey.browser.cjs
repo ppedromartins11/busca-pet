@@ -105,7 +105,7 @@ const photo = fs.readFileSync(path.join(__dirname, "..", "assets", "hex.png"));
         await shot("mapa");
 
         await page.goto(`${base}/#pet/${occurrenceId}`);
-        await page.getByRole("link", { name: "Registrar avistamento nesta prévia" }).click();
+        await page.getByRole("link", { name: "Registrar avistamento" }).click();
         const sighting = page.locator("#real-sighting-form");
         await sighting.locator('[name="area_description"]').fill("Perto da praça central");
         await sighting.locator('[name="description"]').fill("Vi um cão parecido seguindo em direção ao mercado.");
