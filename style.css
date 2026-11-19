@@ -755,6 +755,28 @@ button {
   gap: 20px;
   font-size: 0.9rem;
 }
+.presentation-accounts {
+  margin-top: 26px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+.presentation-accounts summary {
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.presentation-accounts p { margin: 10px 0 0; font-size: .85rem; line-height: 1.5; }
+.presentation-accounts code {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--control-bg);
+  overflow-wrap: anywhere;
+}
+.presentation-accounts small { display: block; margin-top: 14px; line-height: 1.5; color: var(--muted); }
 .auth-footer {
   text-align: center;
   color: var(--muted);
