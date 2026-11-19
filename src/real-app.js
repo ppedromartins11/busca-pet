@@ -589,6 +589,61 @@ import { drawPoster } from "./pet-poster.js";
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
   }
+
+  let posterContext = null;
+  async function posterPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Cartaz indisponível");
+    const row = await D.getPublicPosterData(id);
+    if (ticket !== generation) return;
+    if (!row || row.status !== "active") return unavailable("Este alerta não está disponível para criar cartaz");
+    const ownsPhone = /^55\\d{10,11}$/.test(row.contact_whatsapp || "");
+    setPage(shell("Cartaz para divulgação", "Cartaz pronto para compartilhar ou imprimir, criado com os dados públicos do alerta.",
+      `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><div class="poster-tools">
+        <div class="poster-canvas-frame"><canvas id="bp-poster-canvas" width="1080" height="1350" role="img" aria-label="Cartaz com foto e dados públicos do alerta"></canvas></div>
+        ${ownsPhone ? '<label class="check-label"><input type="checkbox" id="poster-show-phone"><span>Incluir meu WhatsApp na imagem (o número ficará público quando você compartilhar).</span></label>' : ""}
+        <div class="actions"><button class="btn primary" data-action="poster-download" type="button">Salvar cartaz em imagem</button><button class="btn secondary" data-action="poster-print" type="button">Imprimir / salvar PDF</button></div>
+        <p class="hint">O cartaz usa apenas a região pública e as informações do anúncio. Contatos só aparecem na imagem com sua autorização explícita. A imagem pode ser compartilhada pelas opções do seu celular.</p>
+        <p id="poster-status" class="hint" role="status"></p>
+      </div>`, true), "Cartaz para divulgação");
+    const canvas = document.querySelector("#bp-poster-canvas");
+    posterContext = { canvas, row, image: null };
+    drawPoster(canvas, row);
+    if (row.photo_path) {
+      try {
+        const blob = await D.downloadPhoto(row.photo_path);
+        if (ticket !== generation || !canvas.isConnected) return;
+        const source = URL.createObjectURL(blob);
+        photos.push(source);
+        const image = new Image();
+        await new Promise((resolve, reject) => {
+          image.onload = resolve; image.onerror = reject; image.src = source;
+        });
+        if (ticket !== generation || !canvas.isConnected) return;
+        posterContext.image = image;
+        drawPoster(canvas, row, image);
+      } catch {
+        if (ticket === generation && canvas.isConnected) {
+          const status = document.querySelector("#poster-status");
+          if (status) status.textContent = "A foto não pôde ser carregada. O cartaz continua disponível sem ela.";
+        }
+      }
+    }
+  }
+  async function matchesPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Correspondências indisponíveis");
+    const row = await D.getPublicPosterData(id);
+    if (!row || row.status !== "active") return unavailable("Alerta indisponível");
+    const ranked = await D.listPossibleMatches(id);
+    if (ticket !== generation) return;
+    const cards = ranked.map(({ occurrence, reasons }) =>
+      `<div class="match-result"><p><strong>Critérios coincidentes:</strong> ${esc(reasons.join(" · "))}</p>${alertCard(occurrence)}</div>`).join("");
+    setPage(shell("Possíveis correspondências", "Compare anúncios de animais desaparecidos e encontrados.",
+      `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><div class="notice"><strong>Comparação por informações públicas</strong><p>O BuscaPet compara cidade, espécie, porte, descrição e datas. Uma correspondência não confirma que se trata do mesmo animal. Confira as fotos e as características.</p></div>
+      <h2 class="section-heading">${ranked.length} ${ranked.length === 1 ? "anúncio relacionado" : "anúncios relacionados"}</h2>
+      ${ranked.length ? `<div class="match-results">${cards}</div>` : '<p class="hint">Ainda não existem anúncios públicos ativos com características compatíveis nesta cidade.</p>'}
+      <a class="btn secondary" href="#home">Ver todos os alertas</a>`, true), "Possíveis correspondências");
+    if (ranked.length) void showAlertPhotos(ranked.map(({ occurrence }) => occurrence), ticket);
+  }
   async function contactPage(id, ticket) {
     if (!localPreview || !UUID.test(id)) return unavailable("Contato indisponível");
     const occurrence = await D.getOccurrence(id);
@@ -1433,6 +1488,7 @@ import { drawPoster } from "./pet-poster.js";
   async function render() {
     const ticket = ++generation;
     releasePhotos();
+    posterContext = null;
     destroyMap();
     let { route, id, detailId } = routeInfo();
     setPage(shell("Carregando", "Consultando dados autorizados…", "", true), "Carregando");
@@ -1831,6 +1887,22 @@ import { drawPoster } from "./pet-poster.js";
         const role = target.dataset.role || "tutor";
         window.BPLocalPreview.enter(role);
         navigate(role === "admin" ? "#admin" : returnAfterLogin());
+      } else if (action === "poster-download") {
+        const ctx = posterContext;
+        if (!ctx?.canvas?.isConnected) return;
+        const blob = await new Promise((resolve) => ctx.canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw Error("Não foi possível salvar a imagem do cartaz.");
+        const href = URL.createObjectURL(blob);
+        const download = document.createElement("a");
+        download.href = href;
+        download.download = "BuscaPet-cartaz-" + ctx.row.id.slice(0, 8) + ".png";
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        setTimeout(() => URL.revokeObjectURL(href), 1000);
+        message("Cartaz pronto para salvar ou compartilhar.");
+      } else if (action === "poster-print") {
+        if (posterContext?.canvas?.isConnected) window.print();
       } else if (action === "home-type-filter") {
         const type = target.dataset.type;
         if (["", "lost", "found"].includes(type)) {
@@ -2065,6 +2137,12 @@ import { drawPoster } from "./pet-poster.js";
     }
   }
   function onChange(event) {
+    if (event.target.id === "poster-show-phone" && posterContext?.canvas?.isConnected) {
+      drawPoster(posterContext.canvas, posterContext.row, posterContext.image,
+        event.target.checked === true);
+      return;
+    }
+
     if (localPreview && event.target.matches("[data-admin-filter]")) return onInput(event);
     if (event.target.matches?.(".file-picker-input")) queueMicrotask(() => {
       const count = event.target.files?.length || 0;
