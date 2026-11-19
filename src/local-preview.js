@@ -13,7 +13,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [] });
   const read = () => {
     try { return { ...initial(), ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
-    catch { throw Error("Não foi possível ler os dados desta prévia local."); }
+    catch { throw Error("Não foi possível ler os dados deste dispositivo."); }
   };
   const write = (data) => {
     try { localStorage.setItem(KEY, JSON.stringify(data)); }
@@ -96,7 +96,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   }
   const mine = (rows, id) => rows.find((row) => row.id === id && row.owner_id === requireSession());
   const found = (row, label) => {
-    if (!row) throw Error(`${label} não encontrado nesta prévia local.`);
+    if (!row) throw Error(`${label} não encontrado.`);
     return row;
   };
   const update = (collection, id, patch, label) => {
@@ -369,8 +369,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     await new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase("bp.modern-preview.photos");
       request.onsuccess = resolve;
-      request.onerror = () => reject(Error("Não foi possível remover as fotos desta prévia."));
-      request.onblocked = () => reject(Error("Feche outras abas da prévia e tente limpar novamente."));
+      request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
+      request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
     localStorage.removeItem(KEY);
     sessionStorage.removeItem(SESSION);
