@@ -90,7 +90,7 @@ export async function findNearbyServices(latitude, longitude) {
   const unique = new Set();
   return result.elements.map((element) => normalizeOSM(element, { latitude, longitude }))
     .filter((service) => {
-      if (!service) return false;
+      if (!service || (!service.phone && !service.website)) return false;
       const key = service.name.toLocaleLowerCase("pt-BR") + service.mapLink;
       if (unique.has(key)) return false;
       unique.add(key);
