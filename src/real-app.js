@@ -1337,7 +1337,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   function renderAccount() {
     const current = user();
-    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : "Tutor"}</dd></div></dl><div class="actions"><button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>`, true), "Minha conta");
+    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : current.activeRole === "parceiro" ? "Empresa" : "Tutor"}</dd></div></dl><div class="actions">${current.activeRole === "parceiro" ? '<a class="btn primary" href="#minha-empresa">Gerenciar minha empresa</a>' : ""}<button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>`, true), "Minha conta");
     setPage(shell("Minha conta", "Dados da sua Conta BuscaPet.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Tipo de conta</dt><dd>Conta BuscaPet</dd></div></dl><div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">As permissões sensíveis são verificadas no servidor. Recursos administrativos não são exibidos nesta versão.</p>`, true), "Minha conta");
   }
   function account() {
@@ -1395,6 +1395,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "contato") await contactPage(id, ticket);
       else if (route === "login") login();
       else if (route === "registro") registration();
+      else if (route === "cadastro-empresa") businessSignup();
+      else if (route === "minha-empresa") await myBusinessPage(ticket);
       else if (route === "esqueci-senha") forgot();
       else if (route === "redefinir-senha") reset();
       else if (route === "verificar-email") verifyEmail();
@@ -1591,7 +1593,25 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       } else if (form.id === "real-login") {
         await A.signIn(formValue(form, "email"), formValue(form, "password"));
         message("Entrada realizada.");
-        navigate(localPreview && user()?.activeRole === "administrador" ? "#admin" : returnAfterLogin());
+        navigate(localPreview && user()?.activeRole === "administrador" ? "#admin" : localPreview && user()?.activeRole === "parceiro" ? "#minha-empresa" : returnAfterLogin());
+      } else if (form.id === "real-business-registration" && localPreview) {
+        const passwordValue = formValue(form, "password");
+        if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation"))
+          throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
+        const result = await A.signUp({
+          name: formValue(form, "name"), email: formValue(form, "email"),
+          password: passwordValue, passwordConfirmation: formValue(form, "passwordConfirmation"),
+          acceptTerms: form.elements.acceptTerms?.checked === true,
+          acceptPrivacy: form.elements.acceptPrivacy?.checked === true,
+          role: "parceiro", business: businessFormData(form),
+        });
+        notice = "Cadastro comercial recebido. Anote o código de recuperação: "
+          + result.recoveryCode + ". Entre com sua conta para acompanhar a análise.";
+        navigate("#login");
+      } else if (form.id === "real-business-profile" && localPreview) {
+        await D.updateOwnBusiness(businessFormData(form));
+        message("Dados salvos. O cadastro voltou para análise.");
+        navigate("#minha-empresa");
       } else if (form.id === "real-registration") {
         const passwordValue = formValue(form, "password");
         if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation")) throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
