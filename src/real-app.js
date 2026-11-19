@@ -315,7 +315,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const phone = String(item.phone || "").replace(/\\D/g, "");
     const address = [item.address, item.region, item.city].filter(Boolean).join(", ");
     const search = [item.name, item.category, item.description, item.region, item.city].join(" ").toLocaleLowerCase("pt-BR");
-    return `<article class="service-card" data-registered-business data-search="${esc(search)}"><span class="tag">${esc(businessKinds[item.category] || "Serviços pet")}</span><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><p>${esc(address)}</p><div class="actions"><a class="btn secondary small" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver endereço</a>${phone ? `<a class="btn secondary small" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary small" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn plain small" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site</a>` : ""}</div></article>`;
+    return `<article class="service-card" data-registered-business data-search="${esc(search)}"><span class="tag">${esc(businessKinds[item.category] || "Serviços pet")}</span><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><p>${esc(address)}</p><div class="actions"><a class="btn primary small" href="#empresa/${esc(item.id)}">Ver perfil</a><a class="btn secondary small" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver endereço</a>${phone ? `<a class="btn secondary small" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary small" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn plain small" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site</a>` : ""}</div></article>`;
   }
   async function loadRegisteredBusinesses(ticket = generation) {
     const results = document.querySelector("#registered-business-results");
@@ -333,6 +333,16 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     } catch {
       if (ticket === generation && results.isConnected) results.textContent = "Não foi possível carregar os cadastros comerciais.";
     }
+  }
+  async function businessProfile(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Empresa indisponível");
+    const item = await D.getApprovedBusiness(id);
+    if (ticket !== generation) return;
+    if (!item) return unavailable("Empresa indisponível");
+    const address = [item.address, item.region, item.city].filter(Boolean).join(", ");
+    const phone = String(item.phone || "").replace(/\\D/g, "");
+    setPage(shell(item.name, businessKinds[item.category] || "Serviços para pets",
+      `<a class="back-link" href="#services">‹ Voltar à Rede de Apoio</a><section class="support-directory"><span class="tag">Cadastro comercial aprovado</span><h2>Sobre a empresa</h2><p>${esc(item.description)}</p><h2>Onde encontrar</h2><p>${esc(address)}</p><div class="actions"><a class="btn primary" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver no mapa</a>${phone ? `<a class="btn secondary" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn secondary" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site da empresa</a>` : ""}</div><p class="hint">O BuscaPet divulga os dados comerciais fornecidos pelo responsável e aprovados para exibição. Confirme serviços, disponibilidade e endereço diretamente com o estabelecimento.</p></section>`, true), item.name);
   }
   function servicesPage() {
     destroyMap();
@@ -1390,6 +1400,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         realMapPage(id);
       }
       else if (route === "services") servicesPage();
+      else if (route === "empresa") await businessProfile(id, ticket);
       else if (route === "pet") await detail(id, ticket);
       else if (route === "denunciar") await reportOccurrencePage(id, ticket);
       else if (route === "contato") await contactPage(id, ticket);
