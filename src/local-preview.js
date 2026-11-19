@@ -10,7 +10,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const SAMPLE_TUTOR = { id: USER_ID, name: "Tutor BuscaPet", email: "tutor@buscapet.test", role: "tutor", status: "active" };
   const SAMPLE_ADMIN = { id: ADMIN_ID, name: "Administrador BuscaPet", email: "admin@buscapet.test", role: "admin", status: "active" };
   const listeners = new Set();
-  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [] });
+  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [], businesses: [] });
   // Exemplos fictícios da apresentação. Todos os dados continuam apenas neste navegador.
   const demoPhotos = Object.freeze({
     "example/hex.png": new URL("../assets/hex.png", import.meta.url).href,
@@ -140,6 +140,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     : read().accounts.find((a) => a.id === currentId());
   const requireSession = () => {
     if (currentRole() === "admin") return ADMIN_ID;
+    if (currentRole() === "partner") return requirePartner();
     if (currentRole() !== "tutor" || currentTutor()?.status !== "active")
       throw Error("Entre com sua conta de tutor para continuar.");
     return currentTutor().id;
@@ -147,6 +148,39 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const requireAdmin = () => {
     if (currentRole() !== "admin") throw Error("Acesso restrito à administração.");
     return ADMIN_ID;
+  };
+
+  const BUSINESS_CATEGORIES = Object.freeze({
+    petshop: "Pet shop", veterinary: "Clínica veterinária",
+    grooming: "Banho e tosa", boarding: "Hospedagem e creche",
+    training: "Adestramento", other: "Outros serviços pet",
+  });
+  const validateBusiness = (input) => {
+    const str = (field, max) => String(input?.[field] || "").trim().slice(0, max + 1);
+    const name = str("name", 100), category = str("category", 32);
+    const city = str("city", 80), region = str("region", 100);
+    const address = str("address", 200), description = str("description", 500);
+    const rawPhone = str("phone", 30).replace(/\D/g, "");
+    const phone = rawPhone.startsWith("55") && [12, 13].includes(rawPhone.length) ? rawPhone.slice(2) : rawPhone;
+    const website = str("website", 200);
+    if (name.length < 3 || name.length > 100) throw Error("Informe o nome comercial (3 a 100 caracteres).");
+    if (!Object.hasOwn(BUSINESS_CATEGORIES, category)) throw Error("Selecione um tipo de estabelecimento válido.");
+    if (city.length < 2 || city.length > 80 || region.length < 2 || region.length > 100
+      || address.length < 8 || address.length > 200) throw Error("Informe cidade, bairro e endereço comercial completos.");
+    if (!/^[1-9][0-9]{9,10}$/.test(phone)) throw Error("Informe um telefone brasileiro com DDD válido.");
+    if (description.length < 20 || description.length > 500) throw Error("Descreva os serviços oferecidos (20 a 500 caracteres).");
+    if (website && (!/^https?:\/\//i.test(website) || (() => {
+      try { return !new URL(website).hostname.includes("."); } catch { return true; }
+    })())) throw Error("Informe um site iniciado por https:// ou deixe em branco.");
+    if (input?.publishConsent !== true) throw Error("Autorize a divulgação dos dados comerciais fornecidos.");
+    return { name, category, city, region, address, description, phone: "55" + phone, website };
+  };
+  const currentPartner = () => currentRole() === "partner"
+    ? read().accounts.find((account) => account.id === currentId() && account.role === "partner") : null;
+  const requirePartner = () => {
+    const account = currentPartner();
+    if (!account || account.status !== "active") throw Error("Entre com uma conta empresarial ativa para continuar.");
+    return account.id;
   };
   const hex = (bytes) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   const makeSalt = () => hex(crypto.getRandomValues(new Uint8Array(16)));
@@ -180,10 +214,17 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     if (findAccount(email)) throw Error("Já existe uma conta com esse e-mail.");
     const recoveryCode = hex(crypto.getRandomValues(new Uint8Array(6))).toUpperCase();
     const salt = makeSalt(), recoverySalt = makeSalt();
-    const account = { id: crypto.randomUUID(), name, email, role: "tutor", status: "active",
+    const role = input.role === "parceiro" ? "partner" : "tutor";
+    const businessDetails = role === "partner" ? validateBusiness(input.business) : null;
+    const account = { id: crypto.randomUUID(), name, email, role, status: "active",
       salt, passwordHash: await derive(password, salt),
       recoverySalt, recoveryHash: await derive(recoveryCode, recoverySalt), created_at: new Date().toISOString() };
-    const data = read(); data.accounts.push(account); write(data);
+    const data = read(); data.accounts.push(account);
+    if (businessDetails) data.businesses.push({
+      ...businessDetails, id: crypto.randomUUID(), owner_id: account.id, status: "pending",
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    });
+    write(data);
     return { id: account.id, name, email, recoveryCode, needsEmailConfirmation: false };
   }
   async function demoRequestPasswordReset(email, code) {
@@ -262,17 +303,22 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   };
   const auth = {
     ready: Promise.resolve(),
-    getSession: () => currentRole() ? { userId: currentRole() === "admin" ? ADMIN_ID : currentTutor()?.id } : null,
+    getSession: () => currentRole() ? { userId: currentRole() === "admin" ? ADMIN_ID : currentId() } : null,
     getCurrentUser: () => {
       if (currentRole() === "admin") return { ...SAMPLE_ADMIN, roles: ["administrador", "tutor"], activeRole: "administrador", emailVerified: false };
+      if (currentRole() === "partner") {
+        const a = currentPartner();
+        return a ? { id: a.id, name: a.name, email: a.email, status: a.status,
+          emailVerified: false, roles: ["parceiro", "tutor"], activeRole: "parceiro" } : null;
+      }
       if (currentRole() !== "tutor") return null;
       const a = currentTutor();
       return a ? { id: a.id, name: a.name, email: a.email, status: a.status,
         emailVerified: false, roles: ["tutor"], activeRole: "tutor" } : null;
     },
-    getActiveRole: () => currentRole() === "admin" ? "administrador" : currentRole() === "tutor" ? "tutor" : null,
-    getRoles: () => currentRole() === "admin" ? ["administrador", "tutor"] : currentRole() === "tutor" ? ["tutor"] : [],
-    hasRole: (role) => currentRole() === "admin" ? ["administrador", "tutor"].includes(role) : currentRole() === "tutor" && role === "tutor",
+    getActiveRole: () => currentRole() === "admin" ? "administrador" : currentRole() === "tutor" ? "tutor" : currentRole() === "partner" ? "parceiro" : null,
+    getRoles: () => currentRole() === "admin" ? ["administrador", "tutor"] : currentRole() === "tutor" ? ["tutor"] : currentRole() === "partner" ? ["parceiro", "tutor"] : [],
+    hasRole: (role) => currentRole() === "admin" ? ["administrador", "tutor"].includes(role) : (currentRole() === "tutor" && role === "tutor") || (currentRole() === "partner" && ["parceiro", "tutor"].includes(role)),
     requireSession,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     signIn: demoSignIn, signUp: demoSignUp,
@@ -286,6 +332,31 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     },
   };
   const store = {
+
+    async getOwnBusiness() {
+      const id = requirePartner();
+      return copy(read().businesses.find((item) => item.owner_id === id) || null);
+    },
+    async updateOwnBusiness(input) {
+      const id = requirePartner(), details = validateBusiness(input);
+      const data = read(), business = found(data.businesses.find((item) => item.owner_id === id), "Empresa");
+      Object.assign(business, details, { status: "pending", updated_at: new Date().toISOString() });
+      delete business.review_reason;
+      write(data);
+      return copy(business);
+    },
+    async getApprovedBusiness(id) {
+      const companies = await this.listApprovedBusinesses();
+      return companies.find((item) => item.id === id) || null;
+    },
+    async listApprovedBusinesses() {
+      const data = read();
+      const active = new Set(data.accounts.filter((account) => account.status === "active").map((account) => account.id));
+      return copy(data.businesses
+        .filter((item) => item.status === "approved" && active.has(item.owner_id))
+        .map(({ id, name, category, city, region, address, phone, website, description }) =>
+          ({ id, name, category, city, region, address, phone, website, description })));
+    },
     async listPublicOccurrences() { return copy(read().occurrences.filter((row) => row.visibility === "public").sort((a, b) => b.created_at.localeCompare(a.created_at))); },
     async listOwnPets() { return copy(read().pets.filter((row) => row.owner_id === requireSession())); },
     async getPet(id) { return copy(mine(read().pets, id)); },
@@ -311,8 +382,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     async listOwnOccurrences() { return copy(read().occurrences.filter((row) => row.owner_id === requireSession())); },
     async getOccurrence(id) {
       const row = read().occurrences.find((item) => item.id === id);
-      return row && (row.visibility === "public" || (row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole())))
-        ? { ...copy(row), is_owner: row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole()) } : null;
+      return row && (row.visibility === "public" || (row.owner_id === currentId() && ["tutor", "admin", "partner"].includes(currentRole())))
+        ? { ...copy(row), is_owner: row.owner_id === currentId() && ["tutor", "admin", "partner"].includes(currentRole()) } : null;
     },
     async createOccurrence(input) {
       const data = read();
@@ -433,7 +504,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     async localAdminSnapshot() {
       requireAdmin();
       const data = read();
-      return copy({ users: [{ ...SAMPLE_TUTOR, status: data.tutorStatus, test_record: true }, ...data.accounts.map((a) => ({ id: a.id, name: a.name, email: a.email, status: a.status, test_record: true }))], pets: data.pets, occurrences: data.occurrences, reports: data.reports, history: data.adminHistory, sightings: data.sightings });
+      return copy({ users: [{ ...SAMPLE_TUTOR, status: data.tutorStatus, test_record: true }, ...data.accounts.map((a) => ({ id: a.id, name: a.name, email: a.email, status: a.status, test_record: true }))], pets: data.pets, occurrences: data.occurrences, reports: data.reports, history: data.adminHistory, sightings: data.sightings, businesses: data.businesses });
     },
     async localAdminAction(kind, id, decision, reason) {
       requireAdmin();
@@ -454,6 +525,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
           const occurrence = found(data.occurrences.find((item) => item.id === row.occurrence_id), "Alerta");
           occurrence.visibility = "under_review";
         }
+      } else if (kind === "business") {
+        row = found(data.businesses.find((item) => item.id === id), "Empresa");
+        const next = ({ approve: "approved", reject: "rejected", hide: "rejected" })[decision];
+        if (!next || (row.status === next)) throw Error("Esta decisão não se aplica ao cadastro comercial.");
+        row.status = next; row.review_reason = explanation; row.updated_at = new Date().toISOString();
       } else if (kind === "user") {
         if (!["active", "suspended"].includes(decision)) throw Error("Esta ação não se aplica ao usuário.");
         if (id === USER_ID) {

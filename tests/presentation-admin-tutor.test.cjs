@@ -121,7 +121,7 @@ test("tutor nao recebe funcao administrativa nem edita cadastro proprio do admin
 
 test("a interface da apresentacao nao bloqueia as rotas de tutor para o admin", () => {
   const app = fs.readFileSync(path.join(root, "src", "real-app.js"), "utf8");
-  assert.match(app, /\["tutor", "administrador"\]\.includes\(user\(\)\?\.activeRole\)/);
+  assert.match(app, /\["tutor", "administrador", "parceiro"\]\.includes\(user\(\)\?\.activeRole\)/);
   assert.doesNotMatch(app, /\["meus-animais", "novo-animal", "animal", "editar-animal", "publicar"/);
   assert.match(app, /else if \(route === "novo-animal"\) await petForm/);
   assert.match(app, /else if \(route === "publicar"\) await occurrenceForm/);

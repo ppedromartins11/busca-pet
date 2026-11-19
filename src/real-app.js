@@ -15,7 +15,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
+  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let homeFocusTarget = "";
@@ -150,7 +150,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   function chrome(route) {
     const logged = Boolean(user());
-    const tutor = logged && (!localPreview || ["tutor", "administrador"].includes(user()?.activeRole));
+    const tutor = logged && (!localPreview || ["tutor", "administrador", "parceiro"].includes(user()?.activeRole));
+    const business = localPreview && logged && user()?.activeRole === "parceiro";
     const admin = window.BPPermissions?.can("viewAdminDashboard");
     const moderator = window.BPPermissions?.can("moderate");
     const links = [
@@ -158,6 +159,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
       ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(business ? [["minha-empresa", "Minha empresa", "heart"]] : []),
       ...(admin ? [["admin", "Administração", "user"]]
         : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
     ];
@@ -308,9 +310,44 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         }).join("") + "</div>"
       : '<p>Nenhum serviço com cadastro público foi encontrado neste raio. Você ainda pode consultar outros locais no mapa.</p>';
   }
+
+  function registeredBusinessCard(item) {
+    const phone = String(item.phone || "").replace(/\\D/g, "");
+    const address = [item.address, item.region, item.city].filter(Boolean).join(", ");
+    const search = [item.name, item.category, item.description, item.region, item.city].join(" ").toLocaleLowerCase("pt-BR");
+    return `<article class="service-card" data-registered-business data-search="${esc(search)}"><span class="tag">${esc(businessKinds[item.category] || "Serviços pet")}</span><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><p>${esc(address)}</p><div class="actions"><a class="btn primary small" href="#empresa/${esc(item.id)}">Ver perfil</a><a class="btn secondary small" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver endereço</a>${phone ? `<a class="btn secondary small" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary small" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn plain small" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site</a>` : ""}</div></article>`;
+  }
+  async function loadRegisteredBusinesses(ticket = generation) {
+    const results = document.querySelector("#registered-business-results");
+    if (!localPreview || !results) return;
+    try {
+      const rows = await D.listApprovedBusinesses();
+      if (ticket !== generation || !results.isConnected) return;
+      results.innerHTML = rows.length ? `<div class="support-categories">${rows.map(registeredBusinessCard).join("")}</div>`
+        : '<p>Nenhuma empresa cadastrada foi aprovada neste dispositivo. Os estabelecimentos listados acima são independentes do BuscaPet.</p>';
+      const filter = document.querySelector("#registered-business-filter");
+      if (filter) filter.hidden = rows.length === 0;
+      if (filter?.closest("label")) filter.closest("label").hidden = rows.length === 0;
+      document.querySelector("#registered-business-count").textContent =
+        `${rows.length} ${rows.length === 1 ? "empresa cadastrada" : "empresas cadastradas"}`;
+    } catch {
+      if (ticket === generation && results.isConnected) results.textContent = "Não foi possível carregar os cadastros comerciais.";
+    }
+  }
+  async function businessProfile(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Empresa indisponível");
+    const item = await D.getApprovedBusiness(id);
+    if (ticket !== generation) return;
+    if (!item) return unavailable("Empresa indisponível");
+    const address = [item.address, item.region, item.city].filter(Boolean).join(", ");
+    const phone = String(item.phone || "").replace(/\\D/g, "");
+    setPage(shell(item.name, businessKinds[item.category] || "Serviços para pets",
+      `<a class="back-link" href="#services">‹ Voltar à Rede de Apoio</a><section class="support-directory"><span class="tag">Cadastro comercial aprovado</span><h2>Sobre a empresa</h2><p>${esc(item.description)}</p><h2>Onde encontrar</h2><p>${esc(address)}</p><div class="actions"><a class="btn primary" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver no mapa</a>${phone ? `<a class="btn secondary" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn secondary" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site da empresa</a>` : ""}</div><p class="hint">O BuscaPet divulga os dados comerciais fornecidos pelo responsável e aprovados para exibição. Confirme serviços, disponibilidade e endereço diretamente com o estabelecimento.</p></section>`, true), item.name);
+  }
   function servicesPage() {
     destroyMap();
-    setPage(shell("Rede de apoio", "Localize clínicas veterinárias e pet shops e encontre formas de ajudar.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Compartilhe alertas na região, consulte estabelecimentos e envie informações úteis ao tutor.</p></div><a class="btn primary" href="#mapa">${icon("map")}Mapa da busca</a></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Clínicas e pet shops</h2><p>Encontre serviços próximos com sua autorização de localização ou consulte estabelecimentos de Campo Grande (MS) com contatos publicados. Os estabelecimentos listados são independentes do BuscaPet; confirme informações e disponibilidade antes de visitar.</p><div class="actions"><button class="btn primary" type="button" data-action="find-nearby-services">Encontrar perto de mim</button><a class="btn secondary" href="${mapUrl("clínica veterinária pet shop Campo Grande MS")}" target="_blank" rel="noopener noreferrer">Buscar no mapa</a></div><p class="hint" id="service-search-status" role="status" aria-live="polite">Mostrando serviços com informações públicas de Campo Grande (MS). A localização só será solicitada ao tocar no botão; será consultada no OpenStreetMap e não será salva no BuscaPet.</p><div id="service-results">${serviceCards(localServices)}</div><p class="hint" id="service-map-fallback"></p><h2>Orientações para apoiar um tutor</h2><p>Não publique endereço residencial nem localização exata do animal. Informe data, bairro e características do avistamento e evite abordagens que possam assustá-lo.</p></section>`, false), "Rede de apoio");
+    setPage(shell("Rede de apoio", "Localize clínicas veterinárias e pet shops e encontre formas de ajudar.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Compartilhe alertas na região, consulte estabelecimentos e envie informações úteis ao tutor.</p></div><a class="btn primary" href="#mapa">${icon("map")}Mapa da busca</a></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Clínicas e pet shops</h2><p>Encontre serviços próximos com sua autorização de localização ou consulte estabelecimentos de Campo Grande (MS) com contatos publicados. Os estabelecimentos listados são independentes do BuscaPet; confirme informações e disponibilidade antes de visitar.</p><div class="actions"><button class="btn primary" type="button" data-action="find-nearby-services">Encontrar perto de mim</button><a class="btn secondary" href="${mapUrl("clínica veterinária pet shop Campo Grande MS")}" target="_blank" rel="noopener noreferrer">Buscar no mapa</a></div><p class="hint" id="service-search-status" role="status" aria-live="polite">Mostrando serviços com informações públicas de Campo Grande (MS). A localização só será solicitada ao tocar no botão; será consultada no OpenStreetMap e não será salva no BuscaPet.</p><div id="service-results">${serviceCards(localServices)}</div><p class="hint" id="service-map-fallback"></p><section class="support-directory" aria-labelledby="registered-business-heading"><h2 id="registered-business-heading">Empresas cadastradas no BuscaPet</h2><p>Conheça os serviços de empresas cadastradas e aprovadas pela equipe do BuscaPet.</p><div class="actions"><a class="btn primary" href="#cadastro-empresa">Cadastrar minha empresa</a></div><p id="registered-business-count" class="hint" role="status">Consultando empresas cadastradas...</p><label id="registered-business-filter-label" hidden>Buscar empresa ou cidade<input class="control" id="registered-business-filter" type="search" maxlength="100" placeholder="Nome, serviço, cidade ou bairro" hidden></label><div id="registered-business-results" aria-live="polite"><p>Carregando empresas...</p></div></section><h2>Orientações para apoiar um tutor</h2><p>Não publique endereço residencial nem localização exata do animal. Informe data, bairro e características do avistamento e evite abordagens que possam assustá-lo.</p></section>`, false), "Rede de apoio");
+    if (localPreview) void loadRegisteredBusinesses(generation);
   }
   function findNearbyOnRequest(button) {
     const status = document.querySelector("#service-search-status");
@@ -638,10 +675,54 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   const password = (name, label, autocomplete) => `<label>${label}<span class="password-control"><input class="control" type="password" name="${name}" autocomplete="${autocomplete}" required><button class="password-toggle" type="button" data-action="toggle-password" aria-label="Mostrar ${label.toLowerCase()}">Mostrar</button></span></label>`;
   function login() {
-    authPage("Entre no BuscaPet", "Acesse sua conta para acompanhar animais, alertas e avistamentos.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a></div></form>${localPreview ? '<details class="presentation-accounts"><summary>Acessos para avaliação</summary><p><b>Tutor</b>: tutor@buscapet.test</p><p><b>Administração</b>: admin@buscapet.test</p><p>Senha das duas contas: <code>BuscaPet@2026</code></p><small>Ambiente de apresentação: os registros ficam apenas neste navegador; contas de teste não oferecem autenticação de servidor.</small></details>' : ""}`);
+    authPage("Entre no BuscaPet", "Acesse sua conta para acompanhar animais, alertas e avistamentos.", `<form class="form auth-form" id="real-login"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "current-password")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Entrar</button><div class="auth-links"><a href="#esqueci-senha">Esqueci minha senha</a><a href="#registro">Criar conta</a>${localPreview ? '<a href="#cadastro-empresa">Cadastrar empresa</a>' : ""}</div></form>${localPreview ? '<details class="presentation-accounts"><summary>Acessos para avaliação</summary><p><b>Tutor</b>: tutor@buscapet.test</p><p><b>Administração</b>: admin@buscapet.test</p><p>Senha das duas contas: <code>BuscaPet@2026</code></p><small>Ambiente de apresentação: os registros ficam apenas neste navegador; contas de teste não oferecem autenticação de servidor.</small></details>' : ""}`);
   }
   function registration() {
-    authPage("Crie sua conta", "Cadastre-se para organizar suas buscas e acompanhar seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p>${localPreview ? '<p class="hint">Nesta apresentação, contas criadas e seus dados permanecem neste navegador. Não utilize uma senha pessoal.</p>' : ""}</form>`);
+    authPage("Crie sua conta", "Cadastre-se para organizar suas buscas e acompanhar seus animais.", `<form class="form auth-form" id="real-registration"><label>Nome completo<input class="control" name="name" autocomplete="name" minlength="2" maxlength="80" required></label><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}<p class="hint">Use pelo menos 8 caracteres.</p>${password("passwordConfirmation", "Confirmação da senha", "new-password")}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Li e aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Criar conta</button><p class="auth-footer">Já tem conta? <a href="#login">Entrar</a></p>${localPreview ? '<p class="auth-footer">Representa um negócio pet? <a href="#cadastro-empresa">Cadastre sua empresa</a></p>' : ""}${localPreview ? '<p class="hint">Nesta apresentação, contas criadas e seus dados permanecem neste navegador. Não utilize uma senha pessoal.</p>' : ""}</form>`);
+  }
+
+  const businessKinds = Object.freeze({
+    petshop: "Pet shop", veterinary: "Clínica veterinária", grooming: "Banho e tosa",
+    boarding: "Hospedagem e creche", training: "Adestramento", other: "Outros serviços pet",
+  });
+  function businessFields(row = {}) {
+    return `<div class="form-grid"><label class="full">Nome comercial *<input class="control" name="business_name" minlength="3" maxlength="100" value="${esc(row.name || "")}" required placeholder="Nome do estabelecimento"></label>
+      <label>Tipo de serviço *<select class="control" name="business_category" required>${Object.entries(businessKinds).map(([key, label]) => `<option value="${key}" ${row.category === key ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+      <label>Cidade *<input class="control" name="business_city" minlength="2" maxlength="80" value="${esc(row.city || "")}" required></label>
+      <label>Bairro *<input class="control" name="business_region" minlength="2" maxlength="100" value="${esc(row.region || "")}" required></label>
+      <label class="full">Endereço comercial *<input class="control" name="business_address" minlength="8" maxlength="200" value="${esc(row.address || "")}" required></label>
+      <label>Telefone comercial com DDD *<input class="control" name="business_phone" inputmode="tel" type="tel" maxlength="30" value="${esc((row.phone || "").replace(/^55/, ""))}" required placeholder="(67) 99999-9999"></label>
+      <label>Site (opcional)<input class="control" name="business_website" type="url" maxlength="200" value="${esc(row.website || "")}" placeholder="https://www.empresa.com.br"></label>
+      <label class="full">Serviços oferecidos *<textarea class="control" name="business_description" minlength="20" maxlength="500" required placeholder="Descreva os serviços que sua empresa oferece aos tutores.">${esc(row.description || "")}</textarea></label>
+      <label class="check-label full"><input type="checkbox" name="business_publish_consent" required><span>Autorizo a publicação do nome, endereço comercial, telefone, site e descrição do estabelecimento após aprovação.</span></label></div>`;
+  }
+  function businessFormData(form) {
+    return {
+      name: formValue(form, "business_name"), category: formValue(form, "business_category"),
+      city: formValue(form, "business_city"), region: formValue(form, "business_region"),
+      address: formValue(form, "business_address"), phone: formValue(form, "business_phone"),
+      website: formValue(form, "business_website"), description: formValue(form, "business_description"),
+      publishConsent: form.elements.business_publish_consent?.checked === true,
+    };
+  }
+  function businessSignup() {
+    if (!localPreview) return unavailable("Cadastro empresarial indisponível");
+    authPage("Cadastre sua empresa", "Crie uma conta comercial e divulgue seus serviços na Rede de Apoio após aprovação.",
+      `<form class="form auth-form" id="real-business-registration"><label>Nome do responsável *<input class="control" name="name" minlength="2" maxlength="80" required></label><label>E-mail de acesso *<input class="control" name="email" type="email" autocomplete="email" required></label>${password("password", "Senha", "new-password")}${password("passwordConfirmation", "Confirmar senha", "new-password")}${businessFields()}<label class="check-label"><input type="checkbox" name="acceptTerms" required><span>Aceito os <a href="#termos" target="_blank" rel="noopener">Termos de Uso</a>.</span></label><label class="check-label"><input type="checkbox" name="acceptPrivacy" required><span>Li a <a href="#privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label><p class="form-error" role="alert"></p><button type="submit" class="btn primary">Solicitar cadastro empresarial</button><p class="hint">O cadastro é analisado pelo administrador e fica visível apenas após aprovação. As informações ficam somente neste navegador, não são compartilhadas entre aparelhos e não devem usar uma senha pessoal.</p><a href="#login">Já tenho conta</a></form>`);
+  }
+  async function myBusinessPage(ticket) {
+    if (!localPreview || user()?.activeRole !== "parceiro") return adminDenied();
+    const row = await D.getOwnBusiness();
+    if (ticket !== generation) return;
+    if (!row) return unavailable("Empresa não encontrada");
+    const statuses = { pending: "Em análise", approved: "Publicado", rejected: "Revisão necessária" };
+    const status = statuses[row.status] || "Em análise";
+    setPage(shell("Minha empresa", "Gerencie sua apresentação comercial na Rede de Apoio.",
+      `<section class="notice" role="status"><strong>Situação do cadastro: ${esc(status)}</strong><p>${row.status === "approved"
+      ? "Seu perfil aparece na Rede de Apoio deste navegador."
+      : row.status === "pending" ? "Aguardando análise do administrador. Seu perfil ainda não aparece para visitantes."
+      : "Seu perfil precisa de ajustes para ser novamente aprovado."}</p>${row.review_reason ? `<p>Retorno da análise: ${esc(row.review_reason)}</p>` : ""}</section>
+      <form class="form form-page" id="real-business-profile">${businessFields(row)}<p class="form-error" role="alert"></p><button type="submit" class="btn primary">Salvar dados comerciais</button><p class="hint">Alterações enviam o perfil novamente para análise. Não use este cadastro para armazenar endereço residencial ou informações pessoais.</p></form><div class="actions"><a class="btn secondary" href="#services">Ver Rede de Apoio</a></div>`, true), "Minha empresa");
   }
   function forgot() {
     if (localPreview) return authPage("Recuperar acesso", "Informe o e-mail e o código de recuperação fornecido no cadastro.", '<form class="form auth-form" id="real-forgot"><label>E-mail<input class="control" type="email" name="email" autocomplete="email" required></label><label>Código de recuperação<input class="control" name="recovery_code" minlength="12" maxlength="12" autocomplete="off" required></label><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Continuar</button><a href="#login">Voltar ao login</a><p class="hint">A recuperação neste ambiente usa um código salvo apenas no dispositivo. Não há envio de e-mail. Contas de avaliação utilizam a senha fornecida no acesso.</p></form>');
@@ -746,7 +827,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     if (!localPreview || !window.BPPermissions?.can("viewAdminDashboard")) return adminDenied();
     const data = await D.localAdminSnapshot();
     if (ticket !== generation) return;
-    const links = [["", "Visão geral"], ["usuarios", "Usuários"], ["ocorrencias", "Ocorrências"], ["denuncias", "Denúncias"], ["moderacao", "Central de moderação"]];
+    const links = [["", "Visão geral"], ["usuarios", "Usuários"], ["empresas", "Empresas"], ["ocorrencias", "Ocorrências"], ["denuncias", "Denúncias"], ["moderacao", "Central de moderação"]];
     const nav = `<nav class="admin-nav" aria-label="Navegação administrativa">${links.map(([key, label]) => `<a href="#admin${key ? `/${key}` : ""}" ${section === key ? 'class="active" aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
     const header = `<header class="admin-header"><div><span class="admin-eyebrow">Gestão da comunidade</span><h1>Administração</h1><p>Gerencie usuários, alertas, denúncias e ações de moderação.</p></div><div class="admin-header-actions"><button class="btn plain" type="button" data-action="logout">Sair</button></div></header>`;
     const label = (row) => `${types[row.type] || "Alerta"} · ${row.city || "Cidade não informada"} · ${row.region || "Região não informada"}`;
@@ -764,7 +845,18 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     let content = "";
     if (!section) {
       const pending = data.reports.filter((row) => ["open", "in_review"].includes(row.report_status)).length;
-      content = `<div class="admin-content-heading"><h2>Indicadores gerais</h2><p>Acompanhe os indicadores e as atividades mais recentes.</p></div><div class="admin-metrics">${adminMetric("user", data.users.length, "Usuários")}${adminMetric("paw", data.pets.length, "Animais")}${adminMetric("search", data.occurrences.length, "Ocorrências")}${adminMetric("search", data.occurrences.filter((row) => row.status === "active").length, "Ativas")}${adminMetric("heart", data.occurrences.filter((row) => row.status !== "active").length, "Encerradas ou localizadas")}${adminMetric("shield", pending, "Denúncias pendentes")}${adminMetric("shield", pending + data.occurrences.filter((row) => row.visibility === "under_review").length, "Registros aguardando moderação")}</div><div class="actions">${links.slice(1).map(([key, name]) => `<a class="btn secondary" href="#admin/${key}">${name}</a>`).join("")}</div><section class="admin-group"><h2>Atividades recentes</h2>${activities.length ? `<ol class="admin-audit-list">${activities.map((item) => `<li><strong>${esc(item.text)}</strong><span>${esc(fmtDate(item.at, true))} · ocorrência cadastrada</span></li>`).join("")}</ol>` : '<p class="hint">Nenhuma atividade registrada.</p>'}</section>${history}`;
+      const pendingBusinesses = (data.businesses || []).filter((item) => item.status === "pending").length;
+      content = `<div class="admin-content-heading"><h2>Indicadores gerais</h2><p>Acompanhe os indicadores e as atividades mais recentes.</p></div><div class="admin-metrics">${adminMetric("user", data.users.length, "Usuários")}${adminMetric("paw", data.pets.length, "Animais")}${adminMetric("search", data.occurrences.length, "Ocorrências")}${adminMetric("search", data.occurrences.filter((row) => row.status === "active").length, "Ativas")}${adminMetric("heart", data.occurrences.filter((row) => row.status !== "active").length, "Encerradas ou localizadas")}${adminMetric("shield", pending, "Denúncias pendentes")}${adminMetric("shield", pendingBusinesses, "Empresas aguardando aprovação")}${adminMetric("shield", pending + data.occurrences.filter((row) => row.visibility === "under_review").length, "Registros aguardando moderação")}</div><div class="actions">${links.slice(1).map(([key, name]) => `<a class="btn secondary" href="#admin/${key}">${name}</a>`).join("")}</div><section class="admin-group"><h2>Atividades recentes</h2>${activities.length ? `<ol class="admin-audit-list">${activities.map((item) => `<li><strong>${esc(item.text)}</strong><span>${esc(fmtDate(item.at, true))} · ocorrência cadastrada</span></li>`).join("")}</ol>` : '<p class="hint">Nenhuma atividade registrada.</p>'}</section>${history}`;
+    } else if (section === "empresas") {
+      const statusNames = { pending: "Aguardando análise", approved: "Publicado", rejected: "Recusado" };
+      const businessCard = (company) => {
+        const contact = [company.address, company.region, company.city].filter(Boolean).join(", ");
+        const account = data.users.find((a) => a.id === company.owner_id);
+        return `<article class="local-admin-item" data-admin-row data-search="${esc([company.name, company.category, company.city].join(" ").toLowerCase())}" data-status="${esc(company.status)}"><h3>${esc(company.name)}</h3><p>${esc(businessKinds[company.category] || "Serviços pet")} · ${esc(contact)}</p><p>${esc(company.description)}</p><p>Telefone: ${esc(company.phone)}${account ? ` · Responsável: ${esc(account.name)}` : ""}</p><p><strong>${esc(statusNames[company.status] || company.status)}</strong></p>${company.review_reason ? `<p>Última decisão: ${esc(company.review_reason)}</p>` : ""}<div class="actions">${company.status !== "approved" ? actionForm("business", company.id, "approve", "Aprovar cadastro comercial") : actionForm("business", company.id, "hide", "Retirar empresa da rede")}${company.status === "pending" ? actionForm("business", company.id, "reject", "Recusar cadastro") : ""}</div></article>`;
+      };
+      const registered = [...(data.businesses || [])].sort((a, b) =>
+        (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || String(b.updated_at).localeCompare(String(a.updated_at)));
+      content = `<div class="admin-content-heading"><h2>Cadastros de empresas</h2><p>Revise os serviços e dados comerciais antes de publicar. A aprovação não representa certificação da empresa.</p></div><div class="local-admin-filters"><label>Buscar empresa<input class="control" data-admin-filter="query" placeholder="Nome, categoria ou cidade"></label><label>Situação<select class="control" data-admin-filter="status"><option value="">Todas</option><option value="pending">Em análise</option><option value="approved">Publicadas</option><option value="rejected">Recusadas</option></select></label></div>${registered.map(businessCard).join("") || '<p class="hint">Ainda não há solicitações de cadastro comercial.</p>'}<p class="hint" data-admin-empty hidden>Nenhuma empresa corresponde aos filtros.</p>`;
     } else if (section === "usuarios") {
       const account = data.users.find((row) => row.id === detailId);
       content = detailId && account ? `<a class="back-link" href="#admin/usuarios">‹ Voltar</a><h2>${esc(account.name)}</h2><p>${account.status === "active" ? "Ativo" : "Desativado"} · conta cadastrada</p><h3>Animais relacionados</h3>${data.pets.length ? `<ul>${data.pets.map((row) => `<li>${esc(row.name)}</li>`).join("")}</ul>` : '<p class="hint">Nenhum animal.</p>'}<h3>Ocorrências relacionadas</h3>${data.occurrences.map(occurrenceItem).join("") || '<p class="hint">Nenhuma ocorrência.</p>'}${actionForm("user", account.id, account.status === "active" ? "suspended" : "active", account.status === "active" ? "Desativar Tutor Local" : "Ativar Tutor Local")}${history}`
@@ -1255,7 +1347,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   }
   function renderAccount() {
     const current = user();
-    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : "Tutor"}</dd></div></dl><div class="actions"><button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>`, true), "Minha conta");
+    if (localPreview) return setPage(shell("Minha conta", "Confira seus dados e acompanhe suas atividades.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Perfil</dt><dd>${current.activeRole === "administrador" ? "Administrador" : current.activeRole === "parceiro" ? "Empresa" : "Tutor"}</dd></div></dl><div class="actions">${current.activeRole === "parceiro" ? '<a class="btn primary" href="#minha-empresa">Gerenciar minha empresa</a>' : ""}<button class="btn secondary" data-action="logout">Sair</button><button class="btn danger" data-action="clear-local-preview">Redefinir dados de teste</button></div>`, true), "Minha conta");
     setPage(shell("Minha conta", "Dados da sua Conta BuscaPet.", `<dl class="account-details"><div><dt>Nome</dt><dd>${esc(current.name)}</dd></div><div><dt>E-mail</dt><dd>${esc(current.email)}</dd></div><div><dt>Situação</dt><dd>${current.status === "suspended" ? "Suspensa" : "Ativa"}</dd></div><div><dt>Tipo de conta</dt><dd>Conta BuscaPet</dd></div></dl><div class="actions"><a class="btn secondary" href="#esqueci-senha">Trocar senha por e-mail</a><button class="btn secondary" data-action="logout">Sair</button></div><p class="hint">As permissões sensíveis são verificadas no servidor. Recursos administrativos não são exibidos nesta versão.</p>`, true), "Minha conta");
   }
   function account() {
@@ -1308,11 +1400,14 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         realMapPage(id);
       }
       else if (route === "services") servicesPage();
+      else if (route === "empresa") await businessProfile(id, ticket);
       else if (route === "pet") await detail(id, ticket);
       else if (route === "denunciar") await reportOccurrencePage(id, ticket);
       else if (route === "contato") await contactPage(id, ticket);
       else if (route === "login") login();
       else if (route === "registro") registration();
+      else if (route === "cadastro-empresa") businessSignup();
+      else if (route === "minha-empresa") await myBusinessPage(ticket);
       else if (route === "esqueci-senha") forgot();
       else if (route === "redefinir-senha") reset();
       else if (route === "verificar-email") verifyEmail();
@@ -1509,7 +1604,25 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       } else if (form.id === "real-login") {
         await A.signIn(formValue(form, "email"), formValue(form, "password"));
         message("Entrada realizada.");
-        navigate(localPreview && user()?.activeRole === "administrador" ? "#admin" : returnAfterLogin());
+        navigate(localPreview && user()?.activeRole === "administrador" ? "#admin" : localPreview && user()?.activeRole === "parceiro" ? "#minha-empresa" : returnAfterLogin());
+      } else if (form.id === "real-business-registration" && localPreview) {
+        const passwordValue = formValue(form, "password");
+        if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation"))
+          throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
+        const result = await A.signUp({
+          name: formValue(form, "name"), email: formValue(form, "email"),
+          password: passwordValue, passwordConfirmation: formValue(form, "passwordConfirmation"),
+          acceptTerms: form.elements.acceptTerms?.checked === true,
+          acceptPrivacy: form.elements.acceptPrivacy?.checked === true,
+          role: "parceiro", business: businessFormData(form),
+        });
+        notice = "Cadastro comercial recebido. Anote o código de recuperação: "
+          + result.recoveryCode + ". Entre com sua conta para acompanhar a análise.";
+        navigate("#login");
+      } else if (form.id === "real-business-profile" && localPreview) {
+        await D.updateOwnBusiness(businessFormData(form));
+        message("Dados salvos. O cadastro voltou para análise.");
+        navigate("#minha-empresa");
       } else if (form.id === "real-registration") {
         const passwordValue = formValue(form, "password");
         if (passwordValue.length < 8 || passwordValue !== formValue(form, "passwordConfirmation")) throw Error("Confira a senha e a confirmação (mínimo de 8 caracteres).");
@@ -1816,6 +1929,17 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "registered-business-filter" && localPreview) {
+      const search = event.target.value.toLocaleLowerCase("pt-BR").trim();
+      let visible = 0;
+      for (const card of document.querySelectorAll("[data-registered-business]")) {
+        card.hidden = search !== "" && !card.dataset.search.includes(search);
+        if (!card.hidden) visible++;
+      }
+      const count = document.querySelector("#registered-business-count");
+      if (count) count.textContent = visible + (visible === 1 ? " empresa encontrada" : " empresas encontradas");
+      return;
+    }
     if (localPreview && event.target.matches("[data-admin-filter]")) {
       const area = event.target.closest(".local-admin-area");
       const values = Object.fromEntries([...area.querySelectorAll("[data-admin-filter]")].map((input) => [input.dataset.adminFilter, input.value.toLocaleLowerCase("pt-BR").trim()]));
