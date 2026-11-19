@@ -139,6 +139,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     ? { ...SAMPLE_TUTOR, status: read().tutorStatus }
     : read().accounts.find((a) => a.id === currentId());
   const requireSession = () => {
+    if (currentRole() === "admin") return ADMIN_ID;
     if (currentRole() !== "tutor" || currentTutor()?.status !== "active")
       throw Error("Entre com sua conta de tutor para continuar.");
     return currentTutor().id;
@@ -263,15 +264,15 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     ready: Promise.resolve(),
     getSession: () => currentRole() ? { userId: currentRole() === "admin" ? ADMIN_ID : currentTutor()?.id } : null,
     getCurrentUser: () => {
-      if (currentRole() === "admin") return { ...SAMPLE_ADMIN, roles: ["administrador"], activeRole: "administrador", emailVerified: false };
+      if (currentRole() === "admin") return { ...SAMPLE_ADMIN, roles: ["administrador", "tutor"], activeRole: "administrador", emailVerified: false };
       if (currentRole() !== "tutor") return null;
       const a = currentTutor();
       return a ? { id: a.id, name: a.name, email: a.email, status: a.status,
         emailVerified: false, roles: ["tutor"], activeRole: "tutor" } : null;
     },
     getActiveRole: () => currentRole() === "admin" ? "administrador" : currentRole() === "tutor" ? "tutor" : null,
-    getRoles: () => currentRole() === "admin" ? ["administrador"] : currentRole() === "tutor" ? ["tutor"] : [],
-    hasRole: (role) => currentRole() === "admin" ? role === "administrador" : currentRole() === "tutor" && role === "tutor",
+    getRoles: () => currentRole() === "admin" ? ["administrador", "tutor"] : currentRole() === "tutor" ? ["tutor"] : [],
+    hasRole: (role) => currentRole() === "admin" ? ["administrador", "tutor"].includes(role) : currentRole() === "tutor" && role === "tutor",
     requireSession,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     signIn: demoSignIn, signUp: demoSignUp,
@@ -310,8 +311,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     async listOwnOccurrences() { return copy(read().occurrences.filter((row) => row.owner_id === requireSession())); },
     async getOccurrence(id) {
       const row = read().occurrences.find((item) => item.id === id);
-      return row && (row.visibility === "public" || (row.owner_id === currentId() && currentRole() === "tutor"))
-        ? { ...copy(row), is_owner: row.owner_id === currentId() && currentRole() === "tutor" } : null;
+      return row && (row.visibility === "public" || (row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole())))
+        ? { ...copy(row), is_owner: row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole()) } : null;
     },
     async createOccurrence(input) {
       const data = read();
