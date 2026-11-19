@@ -140,6 +140,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     : read().accounts.find((a) => a.id === currentId());
   const requireSession = () => {
     if (currentRole() === "admin") return ADMIN_ID;
+    if (currentRole() === "partner") return requirePartner();
     if (currentRole() !== "tutor" || currentTutor()?.status !== "active")
       throw Error("Entre com sua conta de tutor para continuar.");
     return currentTutor().id;
@@ -308,7 +309,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       if (currentRole() === "partner") {
         const a = currentPartner();
         return a ? { id: a.id, name: a.name, email: a.email, status: a.status,
-          emailVerified: false, roles: ["parceiro"], activeRole: "parceiro" } : null;
+          emailVerified: false, roles: ["parceiro", "tutor"], activeRole: "parceiro" } : null;
       }
       if (currentRole() !== "tutor") return null;
       const a = currentTutor();
@@ -316,8 +317,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
         emailVerified: false, roles: ["tutor"], activeRole: "tutor" } : null;
     },
     getActiveRole: () => currentRole() === "admin" ? "administrador" : currentRole() === "tutor" ? "tutor" : currentRole() === "partner" ? "parceiro" : null,
-    getRoles: () => currentRole() === "admin" ? ["administrador", "tutor"] : currentRole() === "tutor" ? ["tutor"] : currentRole() === "partner" ? ["parceiro"] : [],
-    hasRole: (role) => currentRole() === "admin" ? ["administrador", "tutor"].includes(role) : (currentRole() === "tutor" && role === "tutor") || (currentRole() === "partner" && role === "parceiro"),
+    getRoles: () => currentRole() === "admin" ? ["administrador", "tutor"] : currentRole() === "tutor" ? ["tutor"] : currentRole() === "partner" ? ["parceiro", "tutor"] : [],
+    hasRole: (role) => currentRole() === "admin" ? ["administrador", "tutor"].includes(role) : (currentRole() === "tutor" && role === "tutor") || (currentRole() === "partner" && ["parceiro", "tutor"].includes(role)),
     requireSession,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     signIn: demoSignIn, signUp: demoSignUp,
