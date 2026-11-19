@@ -1,5 +1,31 @@
 # BuscaPet
 
+## Versão atual para apresentação — 19/11/2026
+
+A versão publicada em **https://busca-pet-delta.vercel.app/** utiliza o build de apresentação da branch `apresentacao-contas-2026-11-19`. O código possui uma segunda versão conectada ao Supabase, mas **a apresentação publicada não utiliza banco remoto**.
+
+**O que demonstrar:** feed e mapa de alertas, cadastro de animais, fotos, avistamentos, cartaz para divulgação, correspondências entre animais, carteirinha digital, agenda de cuidados, Rede de Apoio, cadastro e moderação de empresas, moderação de publicações e painel administrativo. O administrador também pode cadastrar animais e publicar alertas. Empresas podem manter perfil comercial e atuar como tutor.
+
+**Acesso de demonstração:** `tutor@buscapet.test` ou `admin@buscapet.test`, senha `BuscaPet@2026`. A conta empresarial é criada pela rota `#cadastro-empresa` e precisa de aprovação do administrador antes de aparecer no diretório local.
+
+**Limite operacional:** contas, fotos e alterações ficam somente no navegador onde foram criadas. Outra pessoa usando outro celular não verá os registros locais. Os anúncios iniciais são dados de apresentação; não representam desaparecimentos reais. Não utilizar informações particulares, senhas pessoais, endereços residenciais ou fotos sem autorização. WhatsApp e sites comerciais são links externos.
+
+### Executar e conferir
+
+```bash
+npm ci
+npm run preview:local
+# Em outro terminal:
+npm run check
+npm test
+npm run build:presentation
+```
+
+O teste visual automatizado `tests/presentation-homologation.browser.cjs` usa Chromium/Chrome e uma instância local do build de apresentação na porta 5186. A verificação de CI está no workflow `.github/workflows/homologacao-apresentacao.yml`. Leia [Roteiro atual de apresentação](docs/ROTEIRO_APRESENTACAO_ATUAL.md) antes de avaliar o sistema.
+
+**Documentação a seguir:** as notas sobre protótipo legado, configuração remota e entregas de outubro são registros históricos e não substituem as instruções desta versão de apresentação.
+
+
 SPA em JavaScript e Vite para publicar e acompanhar buscas por animais. O modo conectado usa Supabase Auth, PostgreSQL com RLS e o bucket privado `pet-media`. A homologação online isolada ainda não está configurada. **Não copie valores de `.env` para uma demonstração nem aponte testes para produção.** Em build de produção sem as duas variáveis do Supabase, a aplicação mostra uma mensagem de configuração e não abre o protótipo local.
 
 ## Iniciar o modo conectado
