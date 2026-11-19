@@ -19,11 +19,16 @@ function storage() {
 }
 async function boot(localStorage = storage()) {
   const { possibleMatches } = await import("../src/pet-matching.js");
-  const window = { BPSupabase: { configured: false } };
+  const window = { BPSupabase: { configured: false }, BPMatch: { possibleMatches } };
+  const indexedDB = { deleteDatabase() {
+    const request = {};
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  } };
   const sessionStorage = storage();
   vm.runInNewContext(source, {
     window, localStorage, sessionStorage, crypto: webcrypto, TextEncoder, URL, Blob,
-    structuredClone, __match: possibleMatches,
+    structuredClone, __match: possibleMatches, indexedDB,
   }, { filename: "src/local-preview.js" });
   return { auth: window.BPAuth, store: window.BPRemoteStore,
     preview: window.BPLocalPreview, localStorage };
