@@ -10,7 +10,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const SAMPLE_TUTOR = { id: USER_ID, name: "Tutor BuscaPet", email: "tutor@buscapet.test", role: "tutor", status: "active" };
   const SAMPLE_ADMIN = { id: ADMIN_ID, name: "Administrador BuscaPet", email: "admin@buscapet.test", role: "admin", status: "active" };
   const listeners = new Set();
-  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [], businesses: [] });
+  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [], businesses: [], petCards: [], careEvents: [] });
   // Exemplos fictícios da apresentação. Todos os dados continuam apenas neste navegador.
   const demoPhotos = Object.freeze({
     "example/hex.png": new URL("../assets/hex.png", import.meta.url).href,
@@ -47,6 +47,17 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     return {
       ...initial(),
       demoExamplesVersion: 1,
+      careDemoVersion: 1,
+      careEvents: [
+        { id: "70000000-0000-4000-8000-000000000001", owner_id: USER_ID, pet_id: ids.hex,
+          title: "Revisar a carteira de vacinação", category: "vaccination",
+          date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+          notes: "Conferir as datas anotadas com o veterinário.", completed_at: null, created_at: ago(1) },
+        { id: "70000000-0000-4000-8000-000000000002", owner_id: USER_ID, pet_id: ids.bold,
+          title: "Banho programado", category: "grooming",
+          date: new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10),
+          notes: "Lembrar do horário combinado.", completed_at: null, created_at: ago(1) },
+      ],
       pets: [
         pet(ids.hex, "Hex", "Pelagem clara", "medium"),
         pet(ids.bold, "Bold", "Pelagem escura", "medium"),
@@ -118,6 +129,14 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
           data[key].push(...examples[key].filter((row) => !known.has(row[idKey])));
         }
         data.demoExamplesVersion = 1;
+        localStorage.setItem(KEY, JSON.stringify(data));
+      }
+      if (data.careDemoVersion !== 1) {
+        const examples = sampleData().careEvents;
+        const ids = new Set(data.pets.map((pet) => pet.id));
+        const existing = new Set(data.careEvents.map((event) => event.id));
+        data.careEvents.push(...examples.filter((event) => ids.has(event.pet_id) && !existing.has(event.id)));
+        data.careDemoVersion = 1;
         localStorage.setItem(KEY, JSON.stringify(data));
       }
       return data;
@@ -244,6 +263,42 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     write(data); sessionStorage.removeItem(RESET_ID);
     return { changed: true };
   }
+
+  const validDate = (date) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return false;
+    const parsed = new Date(String(date) + "T00:00:00Z");
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date
+      && parsed.getUTCFullYear() >= 1900 && parsed.getUTCFullYear() <= 2100;
+  };
+  const stringField = (value, max, label) => {
+    const text = String(value ?? "").trim();
+    if (text.length > max) throw Error(label + " deve ter até " + max + " caracteres.");
+    return text;
+  };
+  const normalizeCard = (card) => {
+    const birth_date = stringField(card.birth_date, 10, "Data de nascimento");
+    if (birth_date && !validDate(birth_date)) throw Error("Informe uma data de nascimento válida.");
+    const weight_kg = stringField(card.weight_kg, 8, "Peso");
+    if (weight_kg && (!/^\d{1,3}(?:[.,]\d{1,2})?$/.test(weight_kg)
+      || Number(weight_kg.replace(",", ".")) <= 0)) throw Error("Informe um peso válido em kg.");
+    return { birth_date, weight_kg,
+      microchip: stringField(card.microchip, 40, "Microchip"),
+      vaccines: stringField(card.vaccines, 500, "Vacinas"),
+      allergies: stringField(card.allergies, 500, "Alergias"),
+      medications: stringField(card.medications, 500, "Medicamentos"),
+      notes: stringField(card.notes, 600, "Observações") };
+  };
+  const CARE_CATEGORIES = new Set(["vaccination", "vet", "grooming", "medication", "other"]);
+  const normalizeCare = (input) => {
+    const title = stringField(input.title, 100, "Título");
+    const date = stringField(input.date, 10, "Data");
+    const category = String(input.category || "");
+    const notes = stringField(input.notes, 300, "Observações");
+    if (title.length < 3) throw Error("Informe um título com pelo menos 3 caracteres.");
+    if (!validDate(date)) throw Error("Informe uma data válida.");
+    if (!CARE_CATEGORIES.has(category)) throw Error("Selecione um tipo de cuidado válido.");
+    return { title, category, date, notes };
+  };
   const mine = (rows, id) => rows.find((row) => row.id === id && row.owner_id === requireSession());
   const found = (row, label) => {
     if (!row) throw Error(`${label} não encontrado.`);
@@ -358,6 +413,80 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
           ({ id, name, category, city, region, address, phone, website, description })));
     },
     async listPublicOccurrences() { return copy(read().occurrences.filter((row) => row.visibility === "public").sort((a, b) => b.created_at.localeCompare(a.created_at))); },
+
+    async getPetCard(petId) {
+      const owner = requireSession();
+      found(mine(read().pets, petId), "Animal");
+      return copy(read().petCards.find((card) => card.pet_id === petId && card.owner_id === owner) || null);
+    },
+    async savePetCard(petId, fields) {
+      const owner = requireSession();
+      const data = read();
+      found(mine(data.pets, petId), "Animal");
+      const patch = normalizeCard(fields || {});
+      const current = data.petCards.find((card) => card.pet_id === petId && card.owner_id === owner);
+      if (current) Object.assign(current, patch, { updated_at: new Date().toISOString() });
+      else data.petCards.push({ pet_id: petId, owner_id: owner, ...patch, updated_at: new Date().toISOString() });
+      write(data);
+      return copy(data.petCards.find((card) => card.pet_id === petId && card.owner_id === owner));
+    },
+    async listCareEvents(petId = null) {
+      const owner = requireSession(), data = read();
+      if (petId) found(mine(data.pets, petId), "Animal");
+      return copy(data.careEvents.filter((event) => event.owner_id === owner && (!petId || event.pet_id === petId))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title)));
+    },
+    async createCareEvent(fields) {
+      const owner = requireSession(), data = read();
+      found(mine(data.pets, fields.pet_id), "Animal");
+      const details = normalizeCare(fields);
+      const event = { id: crypto.randomUUID(), owner_id: owner, pet_id: fields.pet_id, ...details,
+        completed_at: null, created_at: new Date().toISOString() };
+      data.careEvents.push(event);
+      write(data);
+      return copy(event);
+    },
+    async setCareEventComplete(id, completed) {
+      const owner = requireSession(), data = read();
+      const event = found(data.careEvents.find((item) => item.id === id && item.owner_id === owner), "Compromisso");
+      event.completed_at = completed === true ? new Date().toISOString() : null;
+      write(data);
+      return copy(event);
+    },
+    async deleteCareEvent(id) {
+      const owner = requireSession(), data = read();
+      found(data.careEvents.find((item) => item.id === id && item.owner_id === owner), "Compromisso");
+      data.careEvents = data.careEvents.filter((item) => item.id !== id);
+      write(data);
+      return true;
+    },
+    async getPublicPosterData(occurrenceId) {
+      const data = read();
+      const row = data.occurrences.find((item) => item.id === occurrenceId && item.visibility === "public");
+      if (!row) return null;
+      const pet = data.pets.find((item) => item.id === row.pet_id);
+      const cover = data.occurrencePhotos.find((item) => item.occurrence_id === row.id && item.is_cover)
+        || data.occurrencePhotos.find((item) => item.occurrence_id === row.id);
+      return copy({ id: row.id, type: row.type, status: row.status, city: row.city, region: row.region,
+        public_reference: row.public_reference, description: row.description, last_seen_at: row.last_seen_at,
+        pet_name: pet?.name || "", species: pet?.species || "", size: pet?.size || "",
+        contact_whatsapp: row.contact_enabled === true && row.owner_id === currentId() && currentRole() ? row.contact_whatsapp : null,
+        photo_path: cover?.storage_path || null });
+    },
+    async listPossibleMatches(occurrenceId) {
+      const data = read();
+      const reference = data.occurrences.find((row) => row.id === occurrenceId
+        && row.visibility === "public" && row.status === "active");
+      if (!reference) return [];
+      const permitted = data.occurrences.filter((row) => row.visibility === "public" && row.status === "active");
+      const pets = data.pets.map(({ id, species, size, breed, coat_description }) =>
+        ({ id, species, size, breed, coat_description }));
+      return copy((window.BPMatch?.possibleMatches?.(reference, permitted, pets) || []).map(({ occurrence, score, reasons }) =>
+        ({ occurrence: { id: occurrence.id, type: occurrence.type, status: occurrence.status,
+          visibility: occurrence.visibility, city: occurrence.city, region: occurrence.region,
+          public_reference: occurrence.public_reference, description: occurrence.description,
+          last_seen_at: occurrence.last_seen_at }, score, reasons })));
+    },
     async listOwnPets() { return copy(read().pets.filter((row) => row.owner_id === requireSession())); },
     async getPet(id) { return copy(mine(read().pets, id)); },
     async createPet(input) {
@@ -371,6 +500,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       const removedPhotos = data.petPhotos.filter((row) => row.pet_id === id);
       data.pets = data.pets.filter((row) => row.id !== id);
       data.petPhotos = data.petPhotos.filter((row) => row.pet_id !== id);
+      data.petCards = data.petCards.filter((row) => row.pet_id !== id);
+      data.careEvents = data.careEvents.filter((row) => row.pet_id !== id);
       data.occurrences.forEach((row) => { if (row.pet_id === id) row.pet_id = null; });
       write(data);
       for (const photo of removedPhotos) {
@@ -562,7 +693,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
       request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
-    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1, careDemoVersion: 1 }));
     sessionStorage.removeItem(SESSION);
     sessionStorage.removeItem(SESSION_ID);
     sessionStorage.removeItem(RESET_ID);

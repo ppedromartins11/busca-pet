@@ -7,6 +7,7 @@ import "./supabase-client.js";
 import "./store.js";
 import "./remote-store.js";
 import "./auth.js";
+import "./pet-matching.js";
 import "./local-preview.js";
 import "./drafts.js";
 import "./permissions.js";

@@ -2,6 +2,7 @@
 import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-map.js";
 import hexPhotoUrl from "../assets/hex.png";
 import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearby-services.js";
+import { drawPoster } from "./pet-poster.js";
 
 (() => {
   "use strict";
@@ -15,7 +16,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
+  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "agenda", "carteirinha", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let homeFocusTarget = "";
@@ -158,7 +159,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       ["home", "Início", "home"],
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
-      ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["agenda", "Agenda", "calendar"], ["publicar/lost", "Publicar", "plus"]] : []),
       ...(business ? [["minha-empresa", "Minha empresa", "heart"]] : []),
       ...(admin ? [["admin", "Administração", "user"]]
         : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
@@ -567,7 +568,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const reportLink = canReport
       ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
       : "";
-    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${contactAction}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${localPreview && row.visibility === "public" ? `<a class="btn secondary" href="${url("cartaz", id)}">Criar cartaz</a>` : ""}${localPreview && row.visibility === "public" && row.status === "active" ? `<a class="btn secondary" href="${url("semelhantes", id)}">Possíveis correspondências</a>` : ""}${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${contactAction}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
     if (localPreview && row.visibility === "under_review") {
       const visibility = document.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
       if (visibility) visibility.textContent = "Oculta para moderação";
@@ -587,6 +588,61 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     });
     void showPhotos(id, ticket);
     if (mine) void showSightings(id, ticket);
+  }
+
+  let posterContext = null;
+  async function posterPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Cartaz indisponível");
+    const row = await D.getPublicPosterData(id);
+    if (ticket !== generation) return;
+    if (!row || row.status !== "active") return unavailable("Este alerta não está disponível para criar cartaz");
+    const ownsPhone = /^55\\d{10,11}$/.test(row.contact_whatsapp || "");
+    setPage(shell("Cartaz para divulgação", "Cartaz pronto para compartilhar ou imprimir, criado com os dados públicos do alerta.",
+      `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><div class="poster-tools">
+        <div class="poster-canvas-frame"><canvas id="bp-poster-canvas" width="1080" height="1350" role="img" aria-label="Cartaz com foto e dados públicos do alerta"></canvas></div>
+        ${ownsPhone ? '<label class="check-label"><input type="checkbox" id="poster-show-phone"><span>Incluir meu WhatsApp na imagem (o número ficará público quando você compartilhar).</span></label>' : ""}
+        <div class="actions"><button class="btn primary" data-action="poster-download" type="button">Salvar cartaz em imagem</button><button class="btn secondary" data-action="poster-print" type="button">Imprimir / salvar PDF</button></div>
+        <p class="hint">O cartaz usa apenas a região pública e as informações do anúncio. Contatos só aparecem na imagem com sua autorização explícita. A imagem pode ser compartilhada pelas opções do seu celular.</p>
+        <p id="poster-status" class="hint" role="status"></p>
+      </div>`, true), "Cartaz para divulgação");
+    const canvas = document.querySelector("#bp-poster-canvas");
+    posterContext = { canvas, row, image: null };
+    drawPoster(canvas, row);
+    if (row.photo_path) {
+      try {
+        const blob = await D.downloadPhoto(row.photo_path);
+        if (ticket !== generation || !canvas.isConnected) return;
+        const source = URL.createObjectURL(blob);
+        photos.push(source);
+        const image = new Image();
+        await new Promise((resolve, reject) => {
+          image.onload = resolve; image.onerror = reject; image.src = source;
+        });
+        if (ticket !== generation || !canvas.isConnected) return;
+        posterContext.image = image;
+        drawPoster(canvas, row, image);
+      } catch {
+        if (ticket === generation && canvas.isConnected) {
+          const status = document.querySelector("#poster-status");
+          if (status) status.textContent = "A foto não pôde ser carregada. O cartaz continua disponível sem ela.";
+        }
+      }
+    }
+  }
+  async function matchesPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Correspondências indisponíveis");
+    const row = await D.getPublicPosterData(id);
+    if (!row || row.status !== "active") return unavailable("Alerta indisponível");
+    const ranked = await D.listPossibleMatches(id);
+    if (ticket !== generation) return;
+    const cards = ranked.map(({ occurrence, reasons }) =>
+      `<div class="match-result"><p><strong>Critérios coincidentes:</strong> ${esc(reasons.join(" · "))}</p>${alertCard(occurrence)}</div>`).join("");
+    setPage(shell("Possíveis correspondências", "Compare anúncios de animais desaparecidos e encontrados.",
+      `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><div class="notice"><strong>Comparação por informações públicas</strong><p>O BuscaPet compara cidade, espécie, porte, descrição e datas. Uma correspondência não confirma que se trata do mesmo animal. Confira as fotos e as características.</p></div>
+      <h2 class="section-heading">${ranked.length} ${ranked.length === 1 ? "anúncio relacionado" : "anúncios relacionados"}</h2>
+      ${ranked.length ? `<div class="match-results">${cards}</div>` : '<p class="hint">Ainda não existem anúncios públicos ativos com características compatíveis nesta cidade.</p>'}
+      <a class="btn secondary" href="#home">Ver todos os alertas</a>`, true), "Possíveis correspondências");
+    if (ranked.length) void showAlertPhotos(ranked.map(({ occurrence }) => occurrence), ticket);
   }
   async function contactPage(id, ticket) {
     if (!localPreview || !UUID.test(id)) return unavailable("Contato indisponível");
@@ -739,7 +795,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   async function pets(ticket) {
     const rows = await D.listOwnPets();
     if (ticket !== generation) return;
-    setPage(shell("Meus animais", "Cadastre e atualize os animais sob sua responsabilidade.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a></div>${rows.length ? `<div class="alert-grid">${rows.map((row) => `<article class="pet"><div class="pet-body"><span class="tag">${species[row.species]}</span><h3>${esc(row.name)}</h3><p>${esc(row.breed || "Raça não informada")}</p><div class="actions"><a class="btn secondary small" href="${url("animal", row.id)}">Ver detalhes</a><a class="btn secondary small" href="${url("editar-animal", row.id)}">Editar</a></div></div></article>`).join("")}</div>` : empty("Nenhum animal cadastrado", "Comece pelo cadastro de um animal.")}`), "Meus animais");
+    setPage(shell("Meus animais", "Cadastre e atualize os animais sob sua responsabilidade.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#agenda">Agenda de cuidados</a></div>${rows.length ? `<div class="alert-grid">${rows.map((row) => `<article class="pet"><div class="pet-body"><span class="tag">${species[row.species]}</span><h3>${esc(row.name)}</h3><p>${esc(row.breed || "Raça não informada")}</p><div class="actions"><a class="btn secondary small" href="${url("animal", row.id)}">Ver detalhes</a><a class="btn secondary small" href="${url("editar-animal", row.id)}">Editar</a>${localPreview ? `<a class="btn secondary small" href="${url("carteirinha", row.id)}">Carteirinha</a>` : ""}</div></div></article>`).join("")}</div>` : empty("Nenhum animal cadastrado", "Comece pelo cadastro de um animal.")}`), "Meus animais");
   }
   async function showPetPhotos(petId, ticket, targetId) {
     const target = document.querySelector(`#${targetId}`);
@@ -771,8 +827,68 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const row = await D.getPet(id);
     if (ticket !== generation) return;
     if (!row) return unavailable("Animal indisponível");
-    setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button><a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
+    setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button>${localPreview ? `<a class="btn primary" href="${url("carteirinha", id)}">Carteirinha digital</a><a class="btn secondary" href="${url("agenda", id)}">Agenda deste animal</a>` : ""}<a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
     void showPetPhotos(id, ticket, "pet-photo-gallery");
+  }
+
+  const careKinds = Object.freeze({
+    vaccination: "Vacinação", vet: "Consulta veterinária", grooming: "Banho e tosa",
+    medication: "Medicamentos", other: "Outro cuidado",
+  });
+  async function petCardPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Carteirinha indisponível");
+    const [pet, card] = await Promise.all([D.getPet(id), D.getPetCard(id)]);
+    if (ticket !== generation) return;
+    if (!pet) return unavailable("Animal indisponível");
+    const current = card || {};
+    const field = (label, key, limit) =>
+      `<label>${label}<textarea class="control" name="${key}" maxlength="${limit}" rows="2">${esc(current[key] || "")}</textarea></label>`;
+    setPage(shell("Carteirinha de " + pet.name, "Guarde informações importantes do seu pet para consultas futuras.",
+      `<a class="back-link" href="${url("animal", id)}">‹ Voltar ao animal</a>
+      <section class="pet-health-summary"><span class="tag">${esc(species[pet.species] || "Pet")}</span><h2>${esc(pet.name)}</h2><p>${esc(pet.breed || "Raça não informada")}</p><p class="hint">Dados privados: somente esta conta pode visualizar e editar esta carteirinha.</p></section>
+      <form class="form form-page" id="real-pet-card-form" data-pet="${esc(id)}">
+        <div class="form-grid">
+          <label>Data de nascimento<input class="control" type="date" name="birth_date" value="${esc(current.birth_date || "")}"></label>
+          <label>Peso (kg)<input class="control" type="text" inputmode="decimal" name="weight_kg" maxlength="8" placeholder="Ex.: 12,5" value="${esc(current.weight_kg || "")}"></label>
+          <label class="full">Microchip / identificação<input class="control" name="microchip" maxlength="40" value="${esc(current.microchip || "")}" autocomplete="off"></label>
+          ${field("Histórico de vacinas (preenchimento manual)", "vaccines", 500)}
+          ${field("Alergias conhecidas", "allergies", 500)}
+          ${field("Medicamentos informados pelo tutor", "medications", 500)}
+          ${field("Observações", "notes", 600)}
+        </div><p class="form-error" role="alert"></p>
+        <div class="actions"><button class="btn primary" type="submit">Salvar carteirinha</button><a class="btn secondary" href="${url("agenda", id)}">Ver agenda</a></div>
+        <p class="hint">Este registro é informativo e não substitui carteira de vacinação, prontuário ou orientação veterinária.</p>
+      </form>`, true), "Carteirinha do pet");
+  }
+  async function careAgenda(petId, ticket) {
+    if (!localPreview) return unavailable("Agenda indisponível");
+    const [pets, entries] = await Promise.all([D.listOwnPets(), D.listCareEvents()]);
+    if (ticket !== generation) return;
+    if (petId && !pets.some((pet) => pet.id === petId)) return unavailable("Animal indisponível");
+    const today = nowLocal().slice(0, 10);
+    const petsMap = new Map(pets.map((p) => [p.id, p.name]));
+    const filtered = entries.filter((entry) => !petId || entry.pet_id === petId)
+      .sort((a, b) => Boolean(a.completed_at) - Boolean(b.completed_at) || a.date.localeCompare(b.date));
+    const cards = filtered.map((entry) => {
+      const late = !entry.completed_at && entry.date < today;
+      const status = entry.completed_at ? "Concluído" : late ? "Atrasado" : "Agendado";
+      const stamp = new Date(entry.date + "T12:00:00").toLocaleDateString("pt-BR");
+      return `<article class="care-event"><div><span class="tag">${esc(careKinds[entry.category] || "Cuidados")}</span><span class="tag">${status}</span></div><h3>${esc(entry.title)}</h3><p><strong>${esc(petsMap.get(entry.pet_id) || "Meu pet")}</strong> · ${esc(stamp)}</p>${entry.notes ? `<p>${esc(entry.notes)}</p>` : ""}<div class="actions"><button type="button" class="btn secondary small" data-action="care-toggle" data-id="${esc(entry.id)}" data-done="${entry.completed_at ? "false" : "true"}">${entry.completed_at ? "Reabrir" : "Marcar concluído"}</button><button type="button" class="btn danger small" data-action="care-delete" data-id="${esc(entry.id)}">Excluir</button></div></article>`;
+    }).join("");
+    setPage(shell("Agenda de cuidados", "Organize os próximos cuidados com os seus animais.",
+      `<div class="actions"><a class="btn secondary" href="#meus-animais">Meus animais</a>${petId ? '<a class="btn secondary" href="#agenda">Ver todos</a>' : ""}</div>
+      ${pets.length ? `<form class="form form-page" id="real-care-form" data-return="${esc(petId || "")}">
+        <h2 class="section-heading">Adicionar compromisso</h2>
+        <div class="form-grid">
+        <label>Animal *<select class="control" name="pet_id" required>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === petId ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label>
+        <label>Tipo *<select class="control" name="category" required>${Object.entries(careKinds).map(([key, label]) => `<option value="${key}">${label}</option>`).join("")}</select></label>
+        <label>Data *<input type="date" class="control" name="date" value="${today}" required></label>
+        <label class="full">Título *<input class="control" name="title" minlength="3" maxlength="100" placeholder="Ex.: Consulta de rotina" required></label>
+        <label class="full">Observações<textarea class="control" name="notes" maxlength="300" rows="2" placeholder="Horário combinado ou informações úteis"></textarea></label>
+        </div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar compromisso</button></form>` : '<p>Cadastre um animal para começar a utilizar a agenda.</p><a class="btn primary" href="#novo-animal">Cadastrar animal</a>'}
+      <section aria-labelledby="care-list-title"><h2 id="care-list-title" class="section-heading">Compromissos</h2>
+        ${filtered.length ? `<div class="care-list">${cards}</div>` : '<p class="hint">Nenhum cuidado registrado para este filtro.</p>'}
+      </section><p class="hint">Os compromissos ficam neste navegador. O BuscaPet não envia lembretes automáticos nesta versão.</p>`, true), "Agenda de cuidados");
   }
   async function occurrenceForm(id, type, ticket) {
     const [pets, row] = await Promise.all([D.listOwnPets(), id ? D.getOccurrence(id) : Promise.resolve(null)]);
@@ -814,7 +930,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const occurrencesMarkup = occurrencesAvailable
       ? (occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar."))
       : '<section class="notice warn" role="status"><strong>Meus alertas ainda não estão disponíveis neste ambiente.</strong><p>O contrato seguro de leitura da sua conta ainda não foi publicado. Seus dados não foram substituídos e nenhuma informação de outra conta foi consultada.</p><button class="btn secondary" type="button" data-action="retry">Tentar novamente</button></section>';
-    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
+    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a>${localPreview ? '<a class="btn secondary" href="#agenda">Agenda de cuidados</a>' : ""}</div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
   }
   function metric(value) {
     const number = Number(value);
@@ -1372,6 +1488,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   async function render() {
     const ticket = ++generation;
     releasePhotos();
+    posterContext = null;
     destroyMap();
     let { route, id, detailId } = routeInfo();
     setPage(shell("Carregando", "Consultando dados autorizados…", "", true), "Carregando");
@@ -1402,6 +1519,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "services") servicesPage();
       else if (route === "empresa") await businessProfile(id, ticket);
       else if (route === "pet") await detail(id, ticket);
+      else if (route === "cartaz") await posterPage(id, ticket);
+      else if (route === "semelhantes") await matchesPage(id, ticket);
       else if (route === "denunciar") await reportOccurrencePage(id, ticket);
       else if (route === "contato") await contactPage(id, ticket);
       else if (route === "login") login();
@@ -1412,6 +1531,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "redefinir-senha") reset();
       else if (route === "verificar-email") verifyEmail();
       else if (route === "meus-animais") await pets(ticket);
+      else if (route === "agenda") await careAgenda(id, ticket);
+      else if (route === "carteirinha") await petCardPage(id, ticket);
       else if (route === "novo-animal") await petForm("", ticket);
       else if (route === "editar-animal") await petForm(id, ticket);
       else if (route === "animal") await petDetail(id, ticket);
@@ -1649,6 +1770,21 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         history.replaceState({}, "", location.pathname + "#login");
         notice = "Senha atualizada. Entre novamente.";
         void render();
+      } else if (form.id === "real-pet-card-form" && localPreview) {
+        const id = form.dataset.pet;
+        const fields = Object.fromEntries(["birth_date", "weight_kg", "microchip", "vaccines",
+          "allergies", "medications", "notes"].map((key) => [key, formValue(form, key)]));
+        await D.savePetCard(id, fields);
+        message("Carteirinha atualizada.");
+        navigate(url("carteirinha", id));
+      } else if (form.id === "real-care-form" && localPreview) {
+        await D.createCareEvent({
+          pet_id: formValue(form, "pet_id"), category: formValue(form, "category"),
+          date: formValue(form, "date"), title: formValue(form, "title"),
+          notes: formValue(form, "notes"),
+        });
+        message("Compromisso salvo.");
+        navigate(url("agenda", form.dataset.return));
       } else if (form.id === "real-pet-form") {
         const data = Object.fromEntries(["name", "species", "breed", "sex", "size", "coat_description", "distinctive_features"].map((key) => [key, formValue(form, key)]));
         const row = form.dataset.id ? await D.updatePet(form.dataset.id, data) : await D.createPet(data);
@@ -1766,6 +1902,33 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         const role = target.dataset.role || "tutor";
         window.BPLocalPreview.enter(role);
         navigate(role === "admin" ? "#admin" : returnAfterLogin());
+      } else if (action === "care-toggle" && localPreview) {
+        await D.setCareEventComplete(target.dataset.id, target.dataset.done === "true");
+        message("Agenda atualizada.");
+        void render();
+      } else if (action === "care-delete" && localPreview) {
+        confirmDialog("Excluir compromisso?", "Este compromisso será excluído da sua agenda.", "confirm-care-delete", target.dataset.id);
+      } else if (action === "confirm-care-delete" && localPreview) {
+        await D.deleteCareEvent(target.dataset.id);
+        document.querySelector("#real-dialog")?.close();
+        message("Compromisso removido.");
+        void render();
+      } else if (action === "poster-download") {
+        const ctx = posterContext;
+        if (!ctx?.canvas?.isConnected) return;
+        const blob = await new Promise((resolve) => ctx.canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw Error("Não foi possível salvar a imagem do cartaz.");
+        const href = URL.createObjectURL(blob);
+        const download = document.createElement("a");
+        download.href = href;
+        download.download = "BuscaPet-cartaz-" + ctx.row.id.slice(0, 8) + ".png";
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        setTimeout(() => URL.revokeObjectURL(href), 1000);
+        message("Cartaz pronto para salvar ou compartilhar.");
+      } else if (action === "poster-print") {
+        if (posterContext?.canvas?.isConnected) window.print();
       } else if (action === "home-type-filter") {
         const type = target.dataset.type;
         if (["", "lost", "found"].includes(type)) {
@@ -2000,6 +2163,12 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     }
   }
   function onChange(event) {
+    if (event.target.id === "poster-show-phone" && posterContext?.canvas?.isConnected) {
+      drawPoster(posterContext.canvas, posterContext.row, posterContext.image,
+        event.target.checked === true);
+      return;
+    }
+
     if (localPreview && event.target.matches("[data-admin-filter]")) return onInput(event);
     if (event.target.matches?.(".file-picker-input")) queueMicrotask(() => {
       const count = event.target.files?.length || 0;
