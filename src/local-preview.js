@@ -131,7 +131,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     const data = read();
     const siblings = data[collection].filter((row) => row[parentKey] === parentId);
     if (siblings.length >= 5) throw Error("O limite é de cinco fotografias por registro.");
-    const row = { id: crypto.randomUUID(), [parentKey]: parentId, uploaded_by: USER_ID,
+    const row = { id: crypto.randomUUID(), [parentKey]: parentId, uploaded_by: requireSession(),
       storage_path: `local/${crypto.randomUUID()}`, mime_type: file.type, byte_size: file.size,
       created_at: new Date().toISOString(), is_cover: siblings.length === 0 };
     await photoOperation("readwrite", (store) => store.put(file, row.storage_path));
@@ -143,7 +143,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const removePhoto = async (collection, id) => {
     requireSession();
     const data = read();
-    const row = found(data[collection].find((photo) => photo.id === id && photo.uploaded_by === USER_ID), "Fotografia");
+    const row = found(data[collection].find((photo) => photo.id === id && photo.uploaded_by === requireSession()), "Fotografia");
     data[collection] = data[collection].filter((photo) => photo.id !== id);
     write(data);
     if (!data.petPhotos.some((photo) => photo.storage_path === row.storage_path)
@@ -202,8 +202,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     async listOwnOccurrences() { return copy(read().occurrences.filter((row) => row.owner_id === requireSession())); },
     async getOccurrence(id) {
       const row = read().occurrences.find((item) => item.id === id);
-      return row && (row.visibility === "public" || (row.owner_id === USER_ID && currentRole() === "tutor"))
-        ? { ...copy(row), is_owner: row.owner_id === USER_ID && currentRole() === "tutor" } : null;
+      return row && (row.visibility === "public" || (row.owner_id === currentId() && currentRole() === "tutor"))
+        ? { ...copy(row), is_owner: row.owner_id === currentId() && currentRole() === "tutor" } : null;
     },
     async createOccurrence(input) {
       const data = read();
@@ -313,13 +313,13 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
         throw Error("Informe um motivo válido e uma descrição entre 10 e 1.000 caracteres.");
       const existing = data.reports.find((row) => row.occurrence_id === id && ["open", "in_review"].includes(row.report_status));
       if (existing) return { ...copy(existing), already_active: true };
-      const row = { id: crypto.randomUUID(), occurrence_id: id, reporter_id: USER_ID, category, description: description.trim(), report_status: "open", created_at: new Date().toISOString(), test_record: true };
+      const row = { id: crypto.randomUUID(), occurrence_id: id, reporter_id: requireSession(), category, description: description.trim(), report_status: "open", created_at: new Date().toISOString(), test_record: true };
       data.reports.push(row); write(data); return copy(row);
     },
     async localAdminSnapshot() {
       requireAdmin();
       const data = read();
-      return copy({ users: [{ id: USER_ID, name: "Tutor Local (registro demonstrativo)", status: data.tutorStatus, test_record: true }], pets: data.pets, occurrences: data.occurrences, reports: data.reports, history: data.adminHistory, sightings: data.sightings });
+      return copy({ users: [{ ...SAMPLE_TUTOR, status: data.tutorStatus, test_record: true }, ...data.accounts.map((a) => ({ id: a.id, name: a.name, email: a.email, status: a.status, test_record: true }))], pets: data.pets, occurrences: data.occurrences, reports: data.reports, history: data.adminHistory, sightings: data.sightings });
     },
     async localAdminAction(kind, id, decision, reason) {
       requireAdmin();
@@ -341,8 +341,15 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
           occurrence.visibility = "under_review";
         }
       } else if (kind === "user") {
-        if (id !== USER_ID || !["active", "suspended"].includes(decision) || data.tutorStatus === decision) throw Error("Esta ação não se aplica ao usuário.");
-        data.tutorStatus = decision;
+        if (!["active", "suspended"].includes(decision)) throw Error("Esta ação não se aplica ao usuário.");
+        if (id === USER_ID) {
+          if (data.tutorStatus === decision) throw Error("Esta ação não se aplica ao usuário.");
+          data.tutorStatus = decision;
+        } else {
+          const account = found(data.accounts.find((a) => a.id === id), "Conta");
+          if (account.status === decision) throw Error("Esta ação não se aplica ao usuário.");
+          account.status = decision;
+        }
         row = { id, status: decision };
       } else throw Error("Ação administrativa inválida.");
       const entry = { id: crypto.randomUUID(), kind, target_id: id, decision, reason: explanation, created_at: new Date().toISOString(), actor_name: "Administrador Local", test_record: true };
@@ -353,10 +360,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   window.BPAuth = auth;
   window.BPRemoteStore = Object.freeze(store);
   window.BPLocalPreview = Object.freeze({ active: true, enter(role = "tutor") {
-    if (!["tutor", "admin"].includes(role)) throw Error("Perfil local inválido.");
-    if (role === "tutor" && read().tutorStatus !== "active") throw Error("O Tutor Local está desativado nesta prévia. Entre como Administrador Local para reativá-lo.");
+    if (!["tutor", "admin"].includes(role)) throw Error("Perfil inválido.");
+    if (role === "tutor" && read().tutorStatus !== "active") throw Error("Esta conta de tutor está desativada.");
     sessionStorage.setItem(SESSION, role);
-    listeners.forEach((listener) => listener(auth.getCurrentUser(), { kind: "local-preview", relevant: true }));
+    sessionStorage.setItem(SESSION_ID, role === "admin" ? ADMIN_ID : USER_ID);
+    notify("presentation-account");
   }, async clear() {
     await new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase("bp.modern-preview.photos");
@@ -366,6 +374,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     });
     localStorage.removeItem(KEY);
     sessionStorage.removeItem(SESSION);
+    sessionStorage.removeItem(SESSION_ID);
+    sessionStorage.removeItem(RESET_ID);
     sessionStorage.removeItem("bp.real.returnTo");
     listeners.forEach((listener) => listener(null, { kind: "signed-out", relevant: true, signedOutUserId: USER_ID }));
   } });
