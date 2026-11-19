@@ -179,8 +179,8 @@ const chrome = process.env.CHROME_PATH || [
         ["admin/ocorrencias", "Acesso negado"],
         ["admin/denuncias", "Acesso negado"],
         ["admin/moderacao", "Acesso negado"],
-        ["verificar-email", "Crie sua conta"],
-        ["redefinir-senha", "Recuperar acesso"],
+        ["verificar-email", "Conta criada"],
+        ["redefinir-senha", "Link indisponível"],
       ]) {
         await page.goto(`${base}/#${route}`);
         await page.getByRole("heading", { name: heading }).waitFor();
