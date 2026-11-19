@@ -930,7 +930,7 @@ import { drawPoster } from "./pet-poster.js";
     const occurrencesMarkup = occurrencesAvailable
       ? (occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar."))
       : '<section class="notice warn" role="status"><strong>Meus alertas ainda não estão disponíveis neste ambiente.</strong><p>O contrato seguro de leitura da sua conta ainda não foi publicado. Seus dados não foram substituídos e nenhuma informação de outra conta foi consultada.</p><button class="btn secondary" type="button" data-action="retry">Tentar novamente</button></section>';
-    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a></div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
+    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a>${localPreview ? '<a class="btn secondary" href="#agenda">Agenda de cuidados</a>' : ""}</div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
   }
   function metric(value) {
     const number = Number(value);
@@ -1770,6 +1770,21 @@ import { drawPoster } from "./pet-poster.js";
         history.replaceState({}, "", location.pathname + "#login");
         notice = "Senha atualizada. Entre novamente.";
         void render();
+      } else if (form.id === "real-pet-card-form" && localPreview) {
+        const id = form.dataset.pet;
+        const fields = Object.fromEntries(["birth_date", "weight_kg", "microchip", "vaccines",
+          "allergies", "medications", "notes"].map((key) => [key, formValue(form, key)]));
+        await D.savePetCard(id, fields);
+        message("Carteirinha atualizada.");
+        navigate(url("carteirinha", id));
+      } else if (form.id === "real-care-form" && localPreview) {
+        await D.createCareEvent({
+          pet_id: formValue(form, "pet_id"), category: formValue(form, "category"),
+          date: formValue(form, "date"), title: formValue(form, "title"),
+          notes: formValue(form, "notes"),
+        });
+        message("Compromisso salvo.");
+        navigate(url("agenda", form.dataset.return));
       } else if (form.id === "real-pet-form") {
         const data = Object.fromEntries(["name", "species", "breed", "sex", "size", "coat_description", "distinctive_features"].map((key) => [key, formValue(form, key)]));
         const row = form.dataset.id ? await D.updatePet(form.dataset.id, data) : await D.createPet(data);
@@ -1887,6 +1902,17 @@ import { drawPoster } from "./pet-poster.js";
         const role = target.dataset.role || "tutor";
         window.BPLocalPreview.enter(role);
         navigate(role === "admin" ? "#admin" : returnAfterLogin());
+      } else if (action === "care-toggle" && localPreview) {
+        await D.setCareEventComplete(target.dataset.id, target.dataset.done === "true");
+        message("Agenda atualizada.");
+        void render();
+      } else if (action === "care-delete" && localPreview) {
+        confirmDialog("Excluir compromisso?", "Este compromisso será excluído da sua agenda.", "confirm-care-delete", target.dataset.id);
+      } else if (action === "confirm-care-delete" && localPreview) {
+        await D.deleteCareEvent(target.dataset.id);
+        document.querySelector("#real-dialog")?.close();
+        message("Compromisso removido.");
+        void render();
       } else if (action === "poster-download") {
         const ctx = posterContext;
         if (!ctx?.canvas?.isConnected) return;
