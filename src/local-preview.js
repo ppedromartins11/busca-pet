@@ -345,6 +345,10 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       write(data);
       return copy(business);
     },
+    async getApprovedBusiness(id) {
+      const companies = await this.listApprovedBusinesses();
+      return companies.find((item) => item.id === id) || null;
+    },
     async listApprovedBusinesses() {
       const data = read();
       const active = new Set(data.accounts.filter((account) => account.status === "active").map((account) => account.id));
