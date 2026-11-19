@@ -2,10 +2,15 @@
 if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LOCAL_PREVIEW === "true") && !window.BPSupabase?.configured) {
   const KEY = "bp.modern-preview.v1";
   const SESSION = "bp.modern-preview.session";
+  const SESSION_ID = "bp.modern-preview.account-id";
+  const RESET_ID = "bp.modern-preview.reset-account";
   const USER_ID = "00000000-0000-4000-8000-000000000001";
   const ADMIN_ID = "00000000-0000-4000-8000-000000000002";
+  const DEMO_PASSWORD = "BuscaPet@2026";
+  const SAMPLE_TUTOR = { id: USER_ID, name: "Tutor BuscaPet", email: "tutor@buscapet.test", role: "tutor", status: "active" };
+  const SAMPLE_ADMIN = { id: ADMIN_ID, name: "Administrador BuscaPet", email: "admin@buscapet.test", role: "admin", status: "active" };
   const listeners = new Set();
-  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active" });
+  const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [] });
   const read = () => {
     try { return { ...initial(), ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
     catch { throw Error("Não foi possível ler os dados desta prévia local."); }
@@ -15,15 +20,80 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     catch { throw Error("O armazenamento deste navegador está cheio ou indisponível."); }
   };
   const copy = (row) => row == null ? null : structuredClone(row);
+  const currentRole = () => sessionStorage.getItem(SESSION);
+  const currentId = () => sessionStorage.getItem(SESSION_ID) || USER_ID;
+  const getRegistered = (email) => read().accounts.find((a) => a.email === String(email || "").trim().toLowerCase()) || null;
+  const findAccount = (email) => {
+    const key = String(email || "").trim().toLowerCase();
+    return key === SAMPLE_TUTOR.email ? SAMPLE_TUTOR : key === SAMPLE_ADMIN.email ? SAMPLE_ADMIN : getRegistered(key);
+  };
+  const currentTutor = () => currentId() === USER_ID
+    ? { ...SAMPLE_TUTOR, status: read().tutorStatus }
+    : read().accounts.find((a) => a.id === currentId());
   const requireSession = () => {
-    if (sessionStorage.getItem(SESSION) !== "tutor" || read().tutorStatus !== "active") throw Error("Entre como Tutor Local para continuar.");
-    return USER_ID;
+    if (currentRole() !== "tutor" || currentTutor()?.status !== "active")
+      throw Error("Entre com sua conta de tutor para continuar.");
+    return currentTutor().id;
   };
   const requireAdmin = () => {
-    if (sessionStorage.getItem(SESSION) !== "admin") throw Error("Entre como Administrador Local para continuar.");
+    if (currentRole() !== "admin") throw Error("Acesso restrito à administração.");
     return ADMIN_ID;
   };
-  const currentRole = () => sessionStorage.getItem(SESSION);
+  const hex = (bytes) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const makeSalt = () => hex(crypto.getRandomValues(new Uint8Array(16)));
+  const derive = async (password, salt) => {
+    const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    return hex(new Uint8Array(await crypto.subtle.deriveBits({
+      name: "PBKDF2", salt: new TextEncoder().encode(salt), iterations: 120000, hash: "SHA-256",
+    }, material, 256)));
+  };
+  const notify = (kind) => listeners.forEach((listener) => listener(auth.getCurrentUser(), { kind, relevant: true }));
+  async function demoSignIn(email, password) {
+    const account = findAccount(email);
+    const valid = account && ([USER_ID, ADMIN_ID].includes(account.id)
+      ? password === DEMO_PASSWORD
+      : await derive(password, account.salt) === account.passwordHash);
+    if (!valid) throw Error("E-mail ou senha inválidos.");
+    if (account.status !== "active" || (account.id === USER_ID && read().tutorStatus !== "active"))
+      throw Error("Esta conta está desativada.");
+    sessionStorage.setItem(SESSION, account.role);
+    sessionStorage.setItem(SESSION_ID, account.id);
+    notify("signed-in");
+    return auth.getCurrentUser();
+  }
+  async function demoSignUp(input) {
+    const name = String(input.name || "").trim(), email = String(input.email || "").trim().toLowerCase();
+    const password = String(input.password || "");
+    if (name.length < 2 || name.length > 80) throw Error("Informe seu nome completo.");
+    if (!email.includes("@") || !email.includes(".") || email.includes(" ")) throw Error("Informe um e-mail válido.");
+    if (password.length < 8 || password !== input.passwordConfirmation) throw Error("Confirme a senha com pelo menos oito caracteres.");
+    if (!input.acceptTerms || !input.acceptPrivacy) throw Error("Aceite os Termos e a Política de Privacidade.");
+    if (findAccount(email)) throw Error("Já existe uma conta com esse e-mail.");
+    const recoveryCode = hex(crypto.getRandomValues(new Uint8Array(6))).toUpperCase();
+    const salt = makeSalt(), recoverySalt = makeSalt();
+    const account = { id: crypto.randomUUID(), name, email, role: "tutor", status: "active",
+      salt, passwordHash: await derive(password, salt),
+      recoverySalt, recoveryHash: await derive(recoveryCode, recoverySalt), created_at: new Date().toISOString() };
+    const data = read(); data.accounts.push(account); write(data);
+    return { id: account.id, name, email, recoveryCode, needsEmailConfirmation: false };
+  }
+  async function demoRequestPasswordReset(email, code) {
+    const account = getRegistered(email);
+    if (!account || !code || await derive(String(code).trim().toUpperCase(), account.recoverySalt) !== account.recoveryHash)
+      throw Error("Confira o e-mail e o código de recuperação recebido ao criar a conta.");
+    sessionStorage.setItem(RESET_ID, account.id);
+    return { message: "Código confirmado. Defina a nova senha." };
+  }
+  async function demoUpdatePassword(password, confirmation) {
+    const id = sessionStorage.getItem(RESET_ID);
+    if (!id) throw Error("Confirme seu código de recuperação primeiro.");
+    if (password.length < 8 || password !== confirmation) throw Error("Use uma senha de ao menos oito caracteres e confirme.");
+    const data = read(), account = data.accounts.find((a) => a.id === id);
+    if (!account) throw Error("Conta não encontrada neste navegador.");
+    account.salt = makeSalt(); account.passwordHash = await derive(password, account.salt);
+    write(data); sessionStorage.removeItem(RESET_ID);
+    return { changed: true };
+  }
   const mine = (rows, id) => rows.find((row) => row.id === id && row.owner_id === requireSession());
   const found = (row, label) => {
     if (!row) throw Error(`${label} não encontrado nesta prévia local.`);
@@ -83,18 +153,26 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   };
   const auth = {
     ready: Promise.resolve(),
-    getSession: () => currentRole() ? { userId: currentRole() === "admin" ? ADMIN_ID : USER_ID } : null,
-    getCurrentUser: () => currentRole() === "admin"
-      ? { id: ADMIN_ID, name: "Administrador Local", email: "", status: "active", emailVerified: false, roles: ["administrador"], activeRole: "administrador" }
-      : currentRole() === "tutor" ? { id: USER_ID, name: "Tutor Local", email: "", status: read().tutorStatus, emailVerified: false, roles: ["tutor"], activeRole: "tutor" } : null,
+    getSession: () => currentRole() ? { userId: currentRole() === "admin" ? ADMIN_ID : currentTutor()?.id } : null,
+    getCurrentUser: () => {
+      if (currentRole() === "admin") return { ...SAMPLE_ADMIN, roles: ["administrador"], activeRole: "administrador", emailVerified: false };
+      if (currentRole() !== "tutor") return null;
+      const a = currentTutor();
+      return a ? { id: a.id, name: a.name, email: a.email, status: a.status,
+        emailVerified: false, roles: ["tutor"], activeRole: "tutor" } : null;
+    },
     getActiveRole: () => currentRole() === "admin" ? "administrador" : currentRole() === "tutor" ? "tutor" : null,
     getRoles: () => currentRole() === "admin" ? ["administrador"] : currentRole() === "tutor" ? ["tutor"] : [],
     hasRole: (role) => currentRole() === "admin" ? role === "administrador" : currentRole() === "tutor" && role === "tutor",
     requireSession,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    signIn: demoSignIn, signUp: demoSignUp,
+    requestPasswordReset: demoRequestPasswordReset,
+    canResetPassword: () => Boolean(sessionStorage.getItem(RESET_ID)),
+    updatePassword: demoUpdatePassword,
     signOut: async () => {
-      const signedOutUserId = currentRole() === "admin" ? ADMIN_ID : USER_ID;
-      sessionStorage.removeItem(SESSION);
+      const signedOutUserId = currentRole() === "admin" ? ADMIN_ID : currentId();
+      sessionStorage.removeItem(SESSION); sessionStorage.removeItem(SESSION_ID);
       listeners.forEach((listener) => listener(null, { kind: "signed-out", relevant: true, signedOutUserId }));
     },
   };
