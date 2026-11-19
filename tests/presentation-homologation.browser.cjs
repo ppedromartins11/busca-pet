@@ -66,12 +66,15 @@ async function assertResponsive(page, route, width) {
         await page.goto(visit("home"));
         await page.locator("[data-occurrence-card]").first().waitFor();
         assert.equal(await page.locator("[data-occurrence-card]").count(), 3);
-        assert.match(await page.locator(".demo-context").innerText(), /registros de teste/);
+        assert.equal(await page.locator(".demo-context").count(), 0);
+        assert.equal(await page.getByText("Ambiente de apresentação", { exact: false }).count(), 0);
         await page.goto(visit("cartaz/" + seeded.lost));
         await page.locator("#bp-poster-canvas").waitFor();
         assert.equal(await page.evaluate(() => document.querySelector("#bp-poster-canvas").width), 1080);
         assert.equal(await page.locator("#poster-show-phone").count(), 0,
           "o cartaz não deve divulgar contato sem autorização");
+        await page.goto(visit("login"));
+        assert.equal(await page.locator(".presentation-accounts").count(), 0);
         await page.goto(visit("semelhantes/" + seeded.lost));
         await page.locator(".match-result").first().waitFor();
         assert.ok(await page.locator(".match-result").count() >= 1);
