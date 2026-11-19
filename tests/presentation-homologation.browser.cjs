@@ -18,7 +18,7 @@ async function logIn(page, email) {
   await page.locator('#real-login [name="email"]').fill(email);
   await page.locator('#real-login [name="password"]').fill("BuscaPet@2026");
   await page.locator('#real-login button[type="submit"]').click();
-  await page.getByRole("heading", { name: "Minha área" }).waitFor();
+  await page.getByRole("heading", { name: email.startsWith("admin@") ? "Administração" : "Minha área" }).waitFor();
 }
 async function capture(page, name, width) {
   if (!screenshotDir) return;
@@ -29,7 +29,7 @@ async function assertResponsive(page, route, width) {
   await page.goto(visit(route));
   await page.locator("#real-screen h1").waitFor({ state: "visible" });
   await page.waitForFunction(() => !/^(Carregando|Não foi possível carregar)$/.test(
-    document.querySelector("#real-screen h1")?.textContent.trim() || ""), { timeout: 10000 });
+    document.querySelector("#real-screen h1")?.textContent.trim() || ""), undefined, { timeout: 10000 });
   const title = await page.locator("#real-screen h1").innerText();
   assert.ok(title.length >= 3, route + " has no page title");
   const { documentWidth, screenWidth } = await page.evaluate(() => ({
