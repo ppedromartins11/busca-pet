@@ -2,6 +2,7 @@
 import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-map.js";
 import hexPhotoUrl from "../assets/hex.png";
 import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearby-services.js";
+import { drawPoster } from "./pet-poster.js";
 
 (() => {
   "use strict";
@@ -15,7 +16,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   const states = { active: "Em busca", located: "Localizado", reunited: "Reunido", closed: "Encerrado" };
   const types = { lost: "Animal desaparecido", found: "Animal encontrado" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
+  const protectedRoutes = new Set(["minha-conta", "minha-empresa", "agenda", "carteirinha", "meus-animais", "novo-animal", "animal", "editar-animal", "publicar", "editar", "painel-tutor", "avistamento", "denunciar", "admin"]);
   let generation = 0;
   let filters = { query: "", type: "", status: "" };
   let homeFocusTarget = "";
@@ -158,7 +159,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       ["home", "Início", "home"],
       ["mapa", "Mapa da busca", "map"],
       ["services", "Rede de apoio", ""],
-      ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["publicar/lost", "Publicar", "plus"]] : []),
+      ...(tutor ? [["painel-tutor", "Minha área", "paw"], ["meus-animais", "Meus animais", "heart"], ["agenda", "Agenda", "calendar"], ["publicar/lost", "Publicar", "plus"]] : []),
       ...(business ? [["minha-empresa", "Minha empresa", "heart"]] : []),
       ...(admin ? [["admin", "Administração", "user"]]
         : moderator ? [["admin/ocorrencias", "Moderação", "user"]] : []),
@@ -567,7 +568,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const reportLink = canReport
       ? `<a class="btn secondary" href="${url("denunciar", id)}">${user() ? "Denunciar alerta" : "Entrar para denunciar"}</a>`
       : "";
-    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${contactAction}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
+    setPage(shell(types[row.type], `${row.city} · ${row.region}`, `<a class="back-link" href="#home">‹ Voltar aos alertas</a><div class="detail-layout"><div><div id="real-photo-gallery" class="detail-photo"><span class="photo-placeholder">${icon("paw")}<small>Sem foto</small></span></div></div><div><div class="fact-line"><span class="tag">${states[row.status]}</span><span class="tag">${row.visibility === "public" ? "Público" : "Privado"}</span></div><div class="detail"><div><span class="ico">${icon("pin")}</span><p><small>Local aproximado</small><b>${esc(row.region)} · ${esc(row.city)}</b><small>${esc(row.public_reference || "Sem referência adicional")}</small></p></div><div><span class="ico">${icon("calendar")}</span><p><small>Visto em</small><b>${fmtDate(row.last_seen_at, true)}</b></p></div></div><h2 class="section-heading">Descrição</h2><p class="desc">${esc(row.description)}</p><div class="actions"><a class="btn secondary" href="${url("mapa", id)}">${icon("map")}Ver no mapa</a>${localPreview && row.visibility === "public" ? `<a class="btn secondary" href="${url("cartaz", id)}">Criar cartaz</a>` : ""}${localPreview && row.visibility === "public" && row.status === "active" ? `<a class="btn secondary" href="${url("semelhantes", id)}">Possíveis correspondências</a>` : ""}${canReport ? `<a class="btn primary" href="${url("avistamento", id)}">${user() ? "Registrar avistamento" : "Entrar para registrar avistamento"}</a>` : ""}${reportLink}${contactAction}${mine ? `<a class="btn secondary" href="${url("editar", id)}">Editar alerta</a><a class="btn secondary" href="${url("painel-tutor")}">Minha área</a>` : ""}</div>${mine && row.visibility !== "under_review" ? `<div class="actions" aria-label="Alterar situação do alerta">${nextStates.map((state) => `<button class="btn secondary small" data-action="status" data-id="${esc(id)}" data-status="${state}">Marcar: ${states[state]}</button>`).join("")}</div>` : ""}</div></div><section id="real-sightings" aria-label="Avistamentos autorizados"></section>`, false), "Detalhes do alerta");
     if (localPreview && row.visibility === "under_review") {
       const visibility = document.querySelector(".detail-layout .fact-line .tag:nth-child(2)");
       if (visibility) visibility.textContent = "Oculta para moderação";
@@ -739,7 +740,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
   async function pets(ticket) {
     const rows = await D.listOwnPets();
     if (ticket !== generation) return;
-    setPage(shell("Meus animais", "Cadastre e atualize os animais sob sua responsabilidade.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a></div>${rows.length ? `<div class="alert-grid">${rows.map((row) => `<article class="pet"><div class="pet-body"><span class="tag">${species[row.species]}</span><h3>${esc(row.name)}</h3><p>${esc(row.breed || "Raça não informada")}</p><div class="actions"><a class="btn secondary small" href="${url("animal", row.id)}">Ver detalhes</a><a class="btn secondary small" href="${url("editar-animal", row.id)}">Editar</a></div></div></article>`).join("")}</div>` : empty("Nenhum animal cadastrado", "Comece pelo cadastro de um animal.")}`), "Meus animais");
+    setPage(shell("Meus animais", "Cadastre e atualize os animais sob sua responsabilidade.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#agenda">Agenda de cuidados</a></div>${rows.length ? `<div class="alert-grid">${rows.map((row) => `<article class="pet"><div class="pet-body"><span class="tag">${species[row.species]}</span><h3>${esc(row.name)}</h3><p>${esc(row.breed || "Raça não informada")}</p><div class="actions"><a class="btn secondary small" href="${url("animal", row.id)}">Ver detalhes</a><a class="btn secondary small" href="${url("editar-animal", row.id)}">Editar</a>${localPreview ? `<a class="btn secondary small" href="${url("carteirinha", row.id)}">Carteirinha</a>` : ""}</div></div></article>`).join("")}</div>` : empty("Nenhum animal cadastrado", "Comece pelo cadastro de um animal.")}`), "Meus animais");
   }
   async function showPetPhotos(petId, ticket, targetId) {
     const target = document.querySelector(`#${targetId}`);
@@ -771,7 +772,7 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     const row = await D.getPet(id);
     if (ticket !== generation) return;
     if (!row) return unavailable("Animal indisponível");
-    setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button><a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
+    setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button>${localPreview ? `<a class="btn primary" href="${url("carteirinha", id)}">Carteirinha digital</a><a class="btn secondary" href="${url("agenda", id)}">Agenda deste animal</a>` : ""}<a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
     void showPetPhotos(id, ticket, "pet-photo-gallery");
   }
   async function occurrenceForm(id, type, ticket) {
@@ -1402,6 +1403,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "services") servicesPage();
       else if (route === "empresa") await businessProfile(id, ticket);
       else if (route === "pet") await detail(id, ticket);
+      else if (route === "cartaz") await posterPage(id, ticket);
+      else if (route === "semelhantes") await matchesPage(id, ticket);
       else if (route === "denunciar") await reportOccurrencePage(id, ticket);
       else if (route === "contato") await contactPage(id, ticket);
       else if (route === "login") login();
@@ -1412,6 +1415,8 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
       else if (route === "redefinir-senha") reset();
       else if (route === "verificar-email") verifyEmail();
       else if (route === "meus-animais") await pets(ticket);
+      else if (route === "agenda") await careAgenda(id, ticket);
+      else if (route === "carteirinha") await petCardPage(id, ticket);
       else if (route === "novo-animal") await petForm("", ticket);
       else if (route === "editar-animal") await petForm(id, ticket);
       else if (route === "animal") await petDetail(id, ticket);
