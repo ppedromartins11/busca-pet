@@ -32,7 +32,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     const pet = (id, name, coat, size) => ({
       id, owner_id: USER_ID, name, species: "dog", breed: "Sem raça definida",
       sex: "unknown", size, coat_description: coat,
-      distinctive_features: "Animal cadastrado para a apresentação do BuscaPet.",
+      distinctive_features: name === "Hex" ? "Dócil, atende pelo nome e costuma usar coleira." : name === "Bold" ? "Pelagem escura, porte médio e orelhas levantadas." : "Porte pequeno, pelagem curta e comportamento tranquilo.",
       created_at: ago(24), updated_at: ago(3),
     });
     const occurrence = (id, petId, type, status, city, region, reference, description, days) => ({
@@ -48,6 +48,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       ...initial(),
       demoExamplesVersion: 1,
       careDemoVersion: 1,
+      copyPolishVersion: 1,
       careEvents: [
         { id: "70000000-0000-4000-8000-000000000001", owner_id: USER_ID, pet_id: ids.hex,
           title: "Revisar a carteira de vacinação", category: "vaccination",
@@ -65,11 +66,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       ],
       occurrences: [
         occurrence(ids.lost, ids.hex, "lost", "active", "Campo Grande", "Carandá Bosque",
-          "Próximo ao Parque das Nações Indígenas", "Hex desapareceu na região do parque. É dócil e pode estar assustado. Alerta fictício para apresentação.", 2),
+          "Próximo ao Parque das Nações Indígenas", "Hex desapareceu nas proximidades do parque. É dócil e pode estar assustado. Se tiver informações, registre um avistamento.", 2),
         occurrence(ids.found, ids.bold, "found", "active", "Campo Grande", "Centro",
-          "Proximidades da Praça Ary Coelho", "Um cão foi encontrado na região central. Procuramos a família responsável. Registro fictício para apresentação.", 4),
+          "Proximidades da Praça Ary Coelho", "Cão encontrado na região central. Estamos procurando a família responsável. Confira as características antes de entrar em contato.", 4),
         occurrence(ids.reunited, ids.gargamel, "lost", "reunited", "Campo Grande", "Amambai",
-          "Região da Orla Morena", "Gargamel foi localizado e voltou para casa. Exemplo de busca encerrada com sucesso.", 9),
+          "Região da Orla Morena", "Gargamel foi localizado e está novamente com sua família. A busca foi encerrada.", 9),
       ],
       petPhotos: [
         photo("40000000-0000-4000-8000-000000000001", "pet_id", ids.hex, "hex"),
@@ -103,10 +104,43 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       reports: [
         { id: "60000000-0000-4000-8000-000000000001", occurrence_id: ids.found,
           reporter_id: USER_ID, category: "other",
-          description: "Denúncia fictícia para demonstrar a análise e a moderação de alertas.",
+          description: "Solicitação de análise do anúncio: verificar se as informações publicadas estão completas.",
           report_status: "open", created_at: ago(0.7), test_record: true },
       ],
     };
+  };
+  const originalDemoDescriptions = new Map([
+    ["20000000-0000-4000-8000-000000000001", [
+      "Hex desapareceu na região do parque. É dócil e pode estar assustado. Alerta fictício para apresentação.",
+      "Hex desapareceu nas proximidades do parque. É dócil e pode estar assustado. Se tiver informações, registre um avistamento.",
+    ]],
+    ["20000000-0000-4000-8000-000000000002", [
+      "Um cão foi encontrado na região central. Procuramos a família responsável. Registro fictício para apresentação.",
+      "Cão encontrado na região central. Estamos procurando a família responsável. Confira as características antes de entrar em contato.",
+    ]],
+    ["20000000-0000-4000-8000-000000000003", [
+      "Gargamel foi localizado e voltou para casa. Exemplo de busca encerrada com sucesso.",
+      "Gargamel foi localizado e está novamente com sua família. A busca foi encerrada.",
+    ]],
+  ]);
+  const improveDemoText = (data) => {
+    for (const row of data.occurrences) {
+      const [old, next] = originalDemoDescriptions.get(row.id) || [];
+      if (old && row.description === old) row.description = next;
+    }
+    for (const pet of data.pets) {
+      if (pet.distinctive_features === "Animal cadastrado para a apresentação do BuscaPet.") {
+        pet.distinctive_features = pet.name === "Hex"
+          ? "Dócil, atende pelo nome e costuma usar coleira."
+          : pet.name === "Bold" ? "Pelagem escura, porte médio e orelhas levantadas."
+            : "Porte pequeno, pelagem curta e comportamento tranquilo.";
+      }
+    }
+    for (const report of data.reports) {
+      if (report.id === "60000000-0000-4000-8000-000000000001"
+        && report.description === "Denúncia fictícia para demonstrar a análise e a moderação de alertas.")
+        report.description = "Solicitação de análise do anúncio: verificar se as informações publicadas estão completas.";
+    }
   };
   const read = () => {
     try {
@@ -137,6 +171,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
         const existing = new Set(data.careEvents.map((event) => event.id));
         data.careEvents.push(...examples.filter((event) => ids.has(event.pet_id) && !existing.has(event.id)));
         data.careDemoVersion = 1;
+        localStorage.setItem(KEY, JSON.stringify(data));
+      }
+      if (data.copyPolishVersion !== 1) {
+        improveDemoText(data);
+        data.copyPolishVersion = 1;
         localStorage.setItem(KEY, JSON.stringify(data));
       }
       return data;
@@ -526,7 +565,12 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       if (!["active", "located", "reunited", "closed"].includes(status)) throw Error("Situação inválida.");
       update("occurrences", id, { status }, "Alerta"); return true;
     },
-    async getOccurrencePublicLocation(id) { return copy(read().occurrencePoints.find((row) => row.occurrence_id === id) || null); },
+    async getOccurrencePublicLocation(id) {
+      const data = read(), occurrence = data.occurrences.find((row) => row.id === id);
+      if (!occurrence || (occurrence.visibility !== "public" && occurrence.owner_id !== (currentRole() ? currentId() : null)))
+        return null;
+      return copy(data.occurrencePoints.find((row) => row.occurrence_id === id) || null);
+    },
     async saveOccurrencePublicLocation(id, point) {
       const data = read(); found(mine(data.occurrences, id), "Alerta");
       data.occurrencePoints = data.occurrencePoints.filter((row) => row.occurrence_id !== id);
@@ -564,15 +608,30 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       });
       return copy([...occurrencePoints, ...sightingPoints]);
     },
-    async listSightings(id) { requireSession(); return copy(read().sightings.filter((row) => row.occurrence_id === id)); },
+    async listSightings(id) {
+      const data = read();
+      found(mine(data.occurrences, id), "Alerta");
+      return copy(data.sightings.filter((row) => row.occurrence_id === id));
+    },
     async createSighting(input) {
       const data = read(); found(data.occurrences.find((row) => row.id === input.occurrence_id && row.visibility === "public" && row.status === "active"), "Alerta disponível para avistamento");
       const row = { ...input, id: crypto.randomUUID(), reporter_id: requireSession(), status: "pending", created_at: new Date().toISOString() };
       data.sightings.push(row); write(data); return copy(row);
     },
-    async listSightingPublicLocations(ids) { return copy(read().sightingPoints.filter((row) => ids.includes(row.sighting_id))); },
+    async listSightingPublicLocations(ids) {
+      const data = read();
+      const authorized = (point) => {
+        const sighting = data.sightings.find((row) => row.id === point.sighting_id);
+        const occurrence = data.occurrences.find((row) => row.id === sighting?.occurrence_id);
+        return occurrence && ((currentRole() && occurrence.owner_id === currentId())
+          || (occurrence.visibility === "public" && sighting.status === "reviewed" && point.approved_by_tutor));
+      };
+      return copy(data.sightingPoints.filter((point) => ids.includes(point.sighting_id) && authorized(point)));
+    },
     async saveSightingPublicLocation(id, point) {
-      const data = read(); found(data.sightings.find((row) => row.id === id), "Avistamento");
+      const data = read();
+      found(data.sightings.find((row) => row.id === id && row.reporter_id === requireSession()), "Avistamento");
+      data.sightingPoints = data.sightingPoints.filter((point) => point.sighting_id !== id);
       const row = { sighting_id: id, latitude: point.latitude, longitude: point.longitude, radius_m: 900, public_description: point.description || "", approved_by_tutor: false };
       data.sightingPoints.push(row); write(data); return copy(row);
     },
@@ -587,12 +646,20 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       if (sighting.status !== "reviewed") throw Error("Revise o avistamento antes de publicar a região.");
       point.approved_by_tutor = approved === true; write(data); return copy(point);
     },
-    async listPhotos(id) { return copy(read().occurrencePhotos.filter((row) => row.occurrence_id === id)); },
+    async listPhotos(id) {
+      const data = read(), occurrence = data.occurrences.find((row) => row.id === id);
+      if (!occurrence || (occurrence.visibility !== "public" && occurrence.owner_id !== (currentRole() ? currentId() : null))) return [];
+      return copy(data.occurrencePhotos.filter((row) => row.occurrence_id === id));
+    },
     async listPublicCoverPhotos(ids) {
       const data = read(); const publicIds = new Set(data.occurrences.filter((row) => row.visibility === "public").map((row) => row.id));
       return copy(data.occurrencePhotos.filter((row) => ids.includes(row.occurrence_id) && publicIds.has(row.occurrence_id)));
     },
-    async listPetPhotos(id) { requireSession(); return copy(read().petPhotos.filter((row) => row.pet_id === id)); },
+    async listPetPhotos(id) {
+      const data = read();
+      found(mine(data.pets, id), "Animal");
+      return copy(data.petPhotos.filter((row) => row.pet_id === id));
+    },
     async uploadPetPhoto(id, file) { found(mine(read().pets, id), "Animal"); return savePhoto("petPhotos", "pet_id", id, file); },
     async uploadOccurrencePhoto(id, file) { found(mine(read().occurrences, id), "Alerta"); return savePhoto("occurrencePhotos", "occurrence_id", id, file); },
     async reusePetPhotosForOccurrence(petId, occurrenceId) {
@@ -603,6 +670,13 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       data.occurrencePhotos.push(...reused); write(data); return copy(reused);
     },
     async downloadPhoto(path) {
+      const data = read();
+      const authorized = data.petPhotos.some((photo) => photo.storage_path === path
+        && data.pets.some((pet) => pet.id === photo.pet_id && pet.owner_id === (currentRole() ? currentId() : null)))
+        || data.occurrencePhotos.some((photo) => photo.storage_path === path
+          && data.occurrences.some((occurrence) => occurrence.id === photo.occurrence_id
+            && (occurrence.visibility === "public" || (currentRole() && occurrence.owner_id === currentId()))));
+      if (!authorized) throw Error("Fotografia não disponível para esta conta.");
       if (Object.hasOwn(demoPhotos, path)) {
         const response = await fetch(demoPhotos[path]);
         if (!response.ok) throw Error("Fotografia de exemplo indisponível.");
@@ -619,7 +693,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     },
     async deletePetPhoto(id) { return removePhoto("petPhotos", id); },
     async deletePhoto(id) { return removePhoto("occurrencePhotos", id); },
-    async getMyActiveOccurrenceReport(id) { requireSession(); return copy(read().reports.find((row) => row.occurrence_id === id && ["open", "in_review"].includes(row.report_status)) || null); },
+    async getMyActiveOccurrenceReport(id) {
+      const userId = requireSession();
+      return copy(read().reports.find((row) => row.occurrence_id === id && row.reporter_id === userId
+        && ["open", "in_review"].includes(row.report_status)) || null);
+    },
     async reportOccurrence(id, category, description) {
       requireSession();
       const data = read();
@@ -627,7 +705,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       if (!["false_misleading", "suspected_fraud", "inappropriate_content", "duplicate_occurrence", "misuse_of_information", "other"].includes(category)
         || typeof description !== "string" || description.trim().length < 10 || description.trim().length > 1000)
         throw Error("Informe um motivo válido e uma descrição entre 10 e 1.000 caracteres.");
-      const existing = data.reports.find((row) => row.occurrence_id === id && ["open", "in_review"].includes(row.report_status));
+      const existing = data.reports.find((row) => row.occurrence_id === id && row.reporter_id === requireSession() && ["open", "in_review"].includes(row.report_status));
       if (existing) return { ...copy(existing), already_active: true };
       const row = { id: crypto.randomUUID(), occurrence_id: id, reporter_id: requireSession(), category, description: description.trim(), report_status: "open", created_at: new Date().toISOString(), test_record: true };
       data.reports.push(row); write(data); return copy(row);
@@ -693,7 +771,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
       request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
-    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1, careDemoVersion: 1 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1, careDemoVersion: 1, copyPolishVersion: 1 }));
     sessionStorage.removeItem(SESSION);
     sessionStorage.removeItem(SESSION_ID);
     sessionStorage.removeItem(RESET_ID);

@@ -434,7 +434,7 @@ import { drawPoster } from "./pet-poster.js";
     target.removeAttribute("aria-busy");
     target.innerHTML = `<span class="photo-placeholder">${icon("paw")}<small>${esc(text)}</small></span>`;
   }
-  async function showAlertPhotos(rows, ticket) {
+  async function showAlertPhotos(rows, ticket, eager = false) {
     if (!rows.length) return;
     let metadata;
     try { metadata = await D.listPublicCoverPhotos(rows.map((row) => row.id)); }
@@ -463,7 +463,7 @@ import { drawPoster } from "./pet-poster.js";
             const image = document.createElement("img");
             image.className = "alert-cover";
             image.alt = "Foto do alerta de animal";
-            image.loading = "lazy";
+            image.loading = eager ? "eager" : "lazy";
             image.decoding = "async";
             image.addEventListener("load", () => {
               image.classList.add("is-loaded");
@@ -494,7 +494,7 @@ import { drawPoster } from "./pet-poster.js";
       queue.push(entry);
       next();
     };
-    if (!("IntersectionObserver" in window)) { queuedTargets.forEach(enqueue); return; }
+    if (eager || !("IntersectionObserver" in window)) { queuedTargets.forEach(enqueue); return; }
     const targetRecords = new Map(queuedTargets.map((entry) => [entry.target, entry]));
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) if (entry.isIntersecting) {
@@ -532,7 +532,7 @@ import { drawPoster } from "./pet-poster.js";
     const resultContext = `${filters.type ? types[filters.type] : "Todos os tipos"}${filters.status ? ` · ${states[filters.status]}` : ""}`;
     return {
       shown,
-      markup: `<div class="page catalog-page home-page"><section class="search-hero home-hero" aria-labelledby="home-hero-title"><div class="hero-copy"><p class="eyebrow">Busca colaborativa e segura</p><h1 id="home-hero-title">Vamos trazer seu pet de volta.</h1><p>Encontre alertas públicos, compartilhe pistas responsáveis e ajude a reunir famílias.</p><label class="hero-search-field" for="real-query">${icon("search")}<span class="sr-only">Buscar alertas por cidade, região, referência ou descrição</span><input id="real-query" value="${esc(filters.query)}" placeholder="Cidade, região, referência ou descrição" aria-describedby="home-search-help" ${controlsDisabled ? "disabled" : ""}></label><p class="hero-search-help" id="home-search-help">A busca consulta apenas informações públicas autorizadas.</p><div class="hero-actions"><a class="btn primary" href="#publicar/lost">${icon("paw")} Meu pet sumiu</a><a class="btn secondary" href="#publicar/found">Encontrei um pet</a></div></div><figure class="hero-pet"><img src="${hexPhotoUrl}" alt="Hex, cão ilustrativo do BuscaPet"><figcaption>${icon("pin")}<span><b>Cada pista tem um lugar.</b><small>A localização exibida é sempre aproximada.</small></span></figcaption></figure></section><section class="catalog-section" aria-labelledby="community-alerts-title"><header class="catalog-heading"><div><p class="eyebrow">Alertas da comunidade</p><h2 id="community-alerts-title">Encontre uma forma de ajudar hoje</h2><p>Filtre ocorrências por informações públicas e registre avistamentos pelo alerta.</p></div><button class="btn plain small clear-filters" type="button" data-action="clear-home-filters" ${hasFilters ? "" : "hidden"}>Limpar filtros</button></header><div class="browse-layout"><aside class="browse-sidebar" aria-label="Refinar alertas"><div class="filter-heading"><h3>Refine a busca</h3><p>Use somente os filtros disponíveis para os alertas públicos.</p></div><div class="filter-group" role="group" aria-label="Filtrar por tipo de alerta"><span class="filter-label">Tipo de alerta</span><div class="filter-chips">${homeTypeChip("", "Todos", controlsDisabled)}${homeTypeChip("lost", "Desaparecidos", controlsDisabled)}${homeTypeChip("found", "Encontrados", controlsDisabled)}</div></div><div class="filter-controls"><label for="real-status">Situação<select id="real-status" ${controlsDisabled ? "disabled" : ""}><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}" ${filters.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></label></div><div class="support-note"><b>Quer ajudar na busca?</b><p>Abra um alerta para ver a região aproximada e registrar uma pista com segurança.</p><a href="#services">Conhecer a rede de apoio</a></div></aside><div class="browse-results" aria-busy="${phase === "loading"}"><div class="catalog-toolbar"><div><p class="results-kicker">Resultados</p><p id="real-result-count" role="status" aria-live="polite">${ready ? resultCountText(shown.length) : phase === "error" ? "Alertas indisponíveis" : "Consultando alertas autorizados"}</p></div>${ready ? `<p class="results-context">${resultContext}</p>` : ""}</div>${resultMarkup}</div></div></section></div>`,
+      markup: `<div class="page catalog-page home-page"><section class="search-hero home-hero" aria-labelledby="home-hero-title"><div class="hero-copy"><p class="eyebrow">Busca colaborativa e segura</p><h1 id="home-hero-title">Vamos trazer seu pet de volta.</h1><p>Encontre alertas públicos, compartilhe pistas responsáveis e ajude a reunir famílias.</p><label class="hero-search-field" for="real-query">${icon("search")}<span class="sr-only">Buscar alertas por cidade, região, referência ou descrição</span><input id="real-query" value="${esc(filters.query)}" placeholder="Cidade, região, referência ou descrição" aria-describedby="home-search-help" ${controlsDisabled ? "disabled" : ""}></label><p class="hero-search-help" id="home-search-help">A busca consulta apenas informações públicas autorizadas.</p><div class="hero-actions"><a class="btn primary" href="#publicar/lost">${icon("paw")} Meu pet sumiu</a><a class="btn secondary" href="#publicar/found">Encontrei um pet</a></div></div><figure class="hero-pet"><img src="${hexPhotoUrl}" alt="Cão Hex na capa do BuscaPet"><figcaption>${icon("pin")}<span><b>Cada pista tem um lugar.</b><small>A localização exibida é sempre aproximada.</small></span></figcaption></figure></section><section class="catalog-section" aria-labelledby="community-alerts-title"><header class="catalog-heading"><div><p class="eyebrow">Alertas da comunidade</p><h2 id="community-alerts-title">Encontre uma forma de ajudar hoje</h2><p>Filtre ocorrências por informações públicas e registre avistamentos pelo alerta.</p></div><button class="btn plain small clear-filters" type="button" data-action="clear-home-filters" ${hasFilters ? "" : "hidden"}>Limpar filtros</button></header>${localPreview ? '<p class="demo-context" role="note">Ambiente de apresentação: os alertas iniciais são registros de teste, não ocorrências reais. Cadastros e alterações ficam neste navegador.</p>' : ""}<div class="browse-layout"><aside class="browse-sidebar" aria-label="Refinar alertas"><div class="filter-heading"><h3>Refine a busca</h3><p>Use somente os filtros disponíveis para os alertas públicos.</p></div><div class="filter-group" role="group" aria-label="Filtrar por tipo de alerta"><span class="filter-label">Tipo de alerta</span><div class="filter-chips">${homeTypeChip("", "Todos", controlsDisabled)}${homeTypeChip("lost", "Desaparecidos", controlsDisabled)}${homeTypeChip("found", "Encontrados", controlsDisabled)}</div></div><div class="filter-controls"><label for="real-status">Situação<select id="real-status" ${controlsDisabled ? "disabled" : ""}><option value="">Todas</option>${Object.entries(states).map(([value, label]) => `<option value="${value}" ${filters.status === value ? "selected" : ""}>${label}</option>`).join("")}</select></label></div><div class="support-note"><b>Quer ajudar na busca?</b><p>Abra um alerta para ver a região aproximada e registrar uma pista com segurança.</p><a href="#services">Conhecer a rede de apoio</a></div></aside><div class="browse-results" aria-busy="${phase === "loading"}"><div class="catalog-toolbar"><div><p class="results-kicker">Resultados</p><p id="real-result-count" role="status" aria-live="polite">${ready ? resultCountText(shown.length) : phase === "error" ? "Alertas indisponíveis" : "Consultando alertas autorizados"}</p></div>${ready ? `<p class="results-context">${resultContext}</p>` : ""}</div>${resultMarkup}</div></div></section></div>`,
     };
   }
   async function home(ticket) {
@@ -596,7 +596,7 @@ import { drawPoster } from "./pet-poster.js";
     const row = await D.getPublicPosterData(id);
     if (ticket !== generation) return;
     if (!row || row.status !== "active") return unavailable("Este alerta não está disponível para criar cartaz");
-    const ownsPhone = /^55\\d{10,11}$/.test(row.contact_whatsapp || "");
+    const ownsPhone = /^55\d{10,11}$/.test(row.contact_whatsapp || "");
     setPage(shell("Cartaz para divulgação", "Cartaz pronto para compartilhar ou imprimir, criado com os dados públicos do alerta.",
       `<a class="back-link" href="${url("pet", id)}">‹ Voltar ao alerta</a><div class="poster-tools">
         <div class="poster-canvas-frame"><canvas id="bp-poster-canvas" width="1080" height="1350" role="img" aria-label="Cartaz com foto e dados públicos do alerta"></canvas></div>
@@ -917,8 +917,12 @@ import { drawPoster } from "./pet-poster.js";
       if (status) status.textContent += " Selecione novamente a região no mapa para continuar.";
     }
   }
+
   async function dashboard(ticket) {
-    const [petsResult, occurrencesResult] = await Promise.allSettled([D.listOwnPets(), D.listOwnOccurrences()]);
+    const [petsResult, occurrencesResult, careResult] = await Promise.allSettled([
+      D.listOwnPets(), D.listOwnOccurrences(),
+      localPreview ? D.listCareEvents() : Promise.resolve([]),
+    ]);
     if (ticket !== generation) return;
     if (petsResult.status === "rejected") throw petsResult.reason;
     if (occurrencesResult.status === "rejected" && occurrencesResult.reason?.code !== "NOT_PUBLISHED")
@@ -927,10 +931,60 @@ import { drawPoster } from "./pet-poster.js";
     const occurrencesAvailable = occurrencesResult.status === "fulfilled";
     const occurrences = occurrencesAvailable ? occurrencesResult.value : [];
     const active = occurrences.filter((row) => row.status === "active").length;
+    const openCare = localPreview && careResult.status === "fulfilled"
+      ? careResult.value.filter((entry) => !entry.completed_at).sort((a, b) => a.date.localeCompare(b.date))
+      : [];
+    const today = nowLocal().slice(0, 10);
+    const petNames = new Map(pets.map((pet) => [pet.id, pet.name]));
+    const careItems = openCare.slice(0, 3).map((entry) => {
+      const stamp = new Date(entry.date + "T12:00:00").toLocaleDateString("pt-BR");
+      const late = entry.date < today;
+      return `<li class="dashboard-care-row"><div><strong>${esc(entry.title)}</strong><span>${esc(petNames.get(entry.pet_id) || "Meu pet")} · ${esc(careKinds[entry.category] || "Cuidado")}</span></div><div><time datetime="${esc(entry.date)}">${esc(stamp)}</time>${late ? '<small class="dashboard-care-late">Atrasado</small>' : ""}</div></li>`;
+    }).join("");
+    const careMarkup = localPreview
+      ? `<section class="dashboard-care-panel" aria-labelledby="dashboard-care-title">
+          <div class="dashboard-section-heading"><div><h2 id="dashboard-care-title">Próximos cuidados</h2><p>Veja os compromissos dos seus animais.</p></div>
+          <a class="btn secondary small" href="#agenda">Abrir agenda</a></div>
+          ${careResult.status === "rejected" ? '<p class="hint">Não foi possível consultar os cuidados agora. Abra a agenda para tentar novamente.</p>'
+            : openCare.length ? `<ul class="dashboard-care-list">${careItems}</ul>`
+            : '<p class="hint">Não há cuidados pendentes. Cadastre um compromisso na sua agenda.</p>'}
+        </section>` : "";
+    let pendingSightings = null;
+    if (localPreview && occurrencesAvailable) {
+      const results = await Promise.allSettled(occurrences.map((row) => D.listSightings(row.id)));
+      if (ticket !== generation) return;
+      if (results.every((result) => result.status === "fulfilled"))
+        pendingSightings = results.flatMap((result) => result.value).filter((row) => row.status === "pending").length;
+    }
     const occurrencesMarkup = occurrencesAvailable
-      ? (occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>` : empty("Nenhum alerta", "Publique um alerta para começar."))
+      ? (occurrences.length ? `<div class="alert-grid">${occurrences.map(alertCard).join("")}</div>`
+        : empty("Nenhum alerta", "Publique um alerta para começar."))
       : '<section class="notice warn" role="status"><strong>Meus alertas ainda não estão disponíveis neste ambiente.</strong><p>O contrato seguro de leitura da sua conta ainda não foi publicado. Seus dados não foram substituídos e nenhuma informação de outra conta foi consultada.</p><button class="btn secondary" type="button" data-action="retry">Tentar novamente</button></section>';
-    setPage(shell("Minha área", "Gerencie seus animais, alertas e acompanhamentos.", `<div class="actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a><a class="btn secondary" href="#publicar/lost">Animal desaparecido</a><a class="btn secondary" href="#publicar/found">Animal encontrado</a><a class="btn secondary" href="#meus-animais">Meus animais</a>${localPreview ? '<a class="btn secondary" href="#agenda">Agenda de cuidados</a>' : ""}</div><div class="dashboard-summary"><div><b>${pets.length}</b><span>Meus animais</span></div><div><b>${occurrencesAvailable ? occurrences.length : "—"}</b><span>Meus alertas</span></div><div><b>${occurrencesAvailable ? active : "—"}</b><span>Buscas ativas</span></div></div><h2 class="section-heading">Meus alertas</h2>${occurrencesMarkup}`), "Minha área");
+    const metrics = [
+      [pets.length, "Meus animais"],
+      [occurrencesAvailable ? active : "—", "Buscas ativas"],
+      [occurrencesAvailable ? occurrences.length : "—", "Meus alertas"],
+      ...(localPreview ? [[pendingSightings ?? "—", "Pistas pendentes"],
+        [careResult.status === "fulfilled" ? openCare.length : "—", "Cuidados pendentes"]] : []),
+    ];
+    setPage(shell("Minha área", "Acompanhe seus animais, buscas e próximos cuidados.",
+      `<div class="actions dashboard-quick-actions"><a class="btn primary" href="#novo-animal">Cadastrar animal</a>
+        <a class="btn secondary" href="#publicar/lost">Meu pet sumiu</a>
+        <a class="btn secondary" href="#publicar/found">Encontrei um pet</a>
+        <a class="btn secondary" href="#meus-animais">Meus animais</a>
+        ${localPreview ? '<a class="btn secondary" href="#agenda">Agenda de cuidados</a>' : ""}
+      </div>
+      <div class="dashboard-summary dashboard-summary-tutor" aria-label="Resumo da minha conta">
+        ${metrics.map(([number, label]) => `<div><b>${number}</b><span>${label}</span></div>`).join("")}
+      </div>
+      ${careMarkup}
+      <section aria-labelledby="dashboard-alerts-heading">
+        <div class="dashboard-section-heading"><div><h2 id="dashboard-alerts-heading">Meus alertas</h2><p>Acompanhe suas publicações e os relatos recebidos.</p></div>
+          <a class="btn secondary small" href="#publicar/lost">Criar alerta</a></div>
+        ${occurrencesMarkup}
+      </section>`), "Minha área");
+    if (occurrencesAvailable && occurrences.length)
+      void showAlertPhotos(occurrences.filter((row) => row.visibility === "public"), ticket, true);
   }
   function metric(value) {
     const number = Number(value);

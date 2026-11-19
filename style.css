@@ -3281,3 +3281,65 @@ textarea.control {
     position: fixed !important; top: 0; left: 0; width: 190mm !important; max-width: none !important;
     height: auto !important; margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
 }
+
+
+/* Polimento do painel do tutor, sem alterar o tema do BuscaPet. */
+.bp-real-app .dashboard-quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.bp-real-app .dashboard-summary-tutor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 10px;
+  margin: 20px 0 30px;
+  border: none;
+}
+.bp-real-app .dashboard-summary-tutor > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  padding: 18px 20px;
+  min-width: 0;
+}
+.bp-real-app .dashboard-summary-tutor > div:last-child { border: 1px solid var(--line); }
+.bp-real-app .dashboard-summary-tutor b { line-height: 1.25; font-size: clamp(1.7rem, 3vw, 2.1rem); }
+.bp-real-app .dashboard-summary-tutor span { line-height: 1.45; font-size: .84rem; }
+.bp-real-app .dashboard-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 12px 0 18px;
+}
+.bp-real-app .dashboard-section-heading h2 { margin: 0; font-size: clamp(1.25rem, 2.4vw, 1.5rem); }
+.bp-real-app .dashboard-section-heading p { margin: 3px 0 0; color: var(--muted); }
+.bp-real-app .dashboard-care-panel { margin-bottom: 30px; }
+.bp-real-app .dashboard-care-list {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr));
+  gap: 12px;
+}
+.bp-real-app .dashboard-care-row {
+  background: var(--surface-raised); border: 1px solid var(--line);
+  border-radius: 14px; padding: 15px 18px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px; min-width: 0;
+}
+.bp-real-app .dashboard-care-row > div { min-width: 0; display: grid; gap: 5px; }
+.bp-real-app .dashboard-care-row strong { line-height: 1.35; overflow-wrap: anywhere; }
+.bp-real-app .dashboard-care-row span, .bp-real-app .dashboard-care-row time { color: var(--muted); font-size: .81rem; }
+.bp-real-app .dashboard-care-row time { white-space: nowrap; }
+.bp-real-app .dashboard-care-late { color: var(--danger); font-weight: 700; font-size: .76rem; }
+.bp-real-app .demo-context { font-size: .82rem; color: var(--muted); line-height: 1.5;
+  border-left: 3px solid var(--line); padding: 3px 12px; margin: 0 0 18px; }
+@media (max-width: 640px) {
+  .bp-real-app .dashboard-summary-tutor { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .bp-real-app .dashboard-summary-tutor > div { padding: 14px; }
+  .bp-real-app .dashboard-care-list { grid-template-columns: 1fr; }
+  .bp-real-app .dashboard-care-row { padding: 14px; }
+  .bp-real-app .dashboard-section-heading { align-items: flex-start; }
+  .bp-real-app .dashboard-quick-actions .btn { flex: 1 1 auto; }
+}
+@media (max-width: 350px) {
+  .bp-real-app .dashboard-summary-tutor { grid-template-columns: 1fr 1fr; }
+  .bp-real-app .dashboard-summary-tutor b { font-size: 1.55rem; }
+}
