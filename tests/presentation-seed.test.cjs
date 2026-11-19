@@ -96,3 +96,21 @@ test("dados editados persistem e a limpeza não repovoa o navegador", async () =
   const afterReload = setup(original.localStorage);
   assert.equal((await afterReload.data.listPublicOccurrences()).length, 0);
 });
+
+test("o navegador antigo recebe exemplos sem perder seus dados", async () => {
+  const old = storage();
+  old.setItem("bp.modern-preview.v1", JSON.stringify({
+    pets: [{ id: "d0000000-0000-4000-8000-000000000011",
+      owner_id: "00000000-0000-4000-8000-000000000001",
+      name: "Meu animal antigo", species: "dog" }],
+  }));
+  const first = setup(old);
+  await first.auth.signIn("tutor@buscapet.test", "BuscaPet@2026");
+  assert.equal((await first.data.listOwnPets()).length, 4);
+  assert.equal((await first.data.listPublicOccurrences()).length, 3);
+  const second = setup(old);
+  await second.auth.signIn("tutor@buscapet.test", "BuscaPet@2026");
+  const pets = await second.data.listOwnPets();
+  assert.equal(pets.length, 4);
+  assert.equal(pets.filter((pet) => pet.name === "Meu animal antigo").length, 1);
+});
