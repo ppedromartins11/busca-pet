@@ -78,6 +78,7 @@ test("empresa só aparece no diretório após aprovação, sem email pessoal", a
   const id = snapshot.businesses[0].id;
   await app.store.localAdminAction("business", id, "approve", "Dados comerciais conferidos manualmente.");
   const listings = await app.store.listApprovedBusinesses();
+  assert.equal((await app.store.getApprovedBusiness(id)).name, company.name);
   assert.equal(listings.length, 1);
   assert.equal(listings[0].name, company.name);
   assert.equal(listings[0].phone, "5567999991234");
@@ -85,6 +86,7 @@ test("empresa só aparece no diretório após aprovação, sem email pessoal", a
   assert.equal("email" in listings[0], false);
   assert.equal("status" in listings[0], false);
   await app.store.localAdminAction("business", id, "hide", "Endereço comercial deixou de estar atualizado.");
+  assert.equal(await app.store.getApprovedBusiness(id), null);
   assert.equal((await app.store.listApprovedBusinesses()).length, 0);
   await app.store.localAdminAction("business", id, "approve", "Dados conferidos para nova publicação.");
   assert.equal((await app.store.listApprovedBusinesses()).length, 1);
@@ -138,10 +140,10 @@ test("valida campos comerciais, não permite papéis administrativos pelo cadast
 test("a interface contém cadastro de empresas, área própria, diretório e moderação", () => {
   const source = fs.readFileSync(path.join(root, "src/real-app.js"), "utf8");
   for (const value of [
-    'route === "cadastro-empresa"', 'route === "minha-empresa"',
+    'route === "cadastro-empresa"', 'route === "minha-empresa"', 'route === "empresa"',
     'id="real-business-registration"', 'id="real-business-profile"',
     'id="registered-business-results"', 'section === "empresas"',
     'actionForm("business"', 'listApprovedBusinesses', 'getOwnBusiness',
-    'data-registered-business', 'business_publish_consent',
+    'data-registered-business', 'business_publish_consent', 'businessProfile',
   ]) assert.ok(source.includes(value), "Falta recurso: " + value);
 });
