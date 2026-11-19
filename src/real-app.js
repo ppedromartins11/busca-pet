@@ -775,6 +775,66 @@ import { drawPoster } from "./pet-poster.js";
     setPage(shell(row.name, "Cadastro privado do animal.", `<div class="photo-gallery" id="pet-photo-gallery" data-count="0" aria-live="polite"></div><dl class="account-details"><div><dt>Espécie</dt><dd>${species[row.species]}</dd></div><div><dt>Raça</dt><dd>${esc(row.breed || "Não informada")}</dd></div><div><dt>Pelagem</dt><dd>${esc(row.coat_description || "Não informada")}</dd></div><div><dt>Características</dt><dd>${esc(row.distinctive_features || "Não informadas")}</dd></div></dl><div class="actions"><a class="btn primary" href="${url("editar-animal", id)}">Editar</a><button class="btn danger" data-action="delete-pet" data-id="${esc(id)}">Excluir animal</button>${localPreview ? `<a class="btn primary" href="${url("carteirinha", id)}">Carteirinha digital</a><a class="btn secondary" href="${url("agenda", id)}">Agenda deste animal</a>` : ""}<a class="btn secondary" href="#meus-animais">Voltar</a></div>`, true), row.name);
     void showPetPhotos(id, ticket, "pet-photo-gallery");
   }
+
+  const careKinds = Object.freeze({
+    vaccination: "Vacinação", vet: "Consulta veterinária", grooming: "Banho e tosa",
+    medication: "Medicamentos", other: "Outro cuidado",
+  });
+  async function petCardPage(id, ticket) {
+    if (!localPreview || !UUID.test(id)) return unavailable("Carteirinha indisponível");
+    const [pet, card] = await Promise.all([D.getPet(id), D.getPetCard(id)]);
+    if (ticket !== generation) return;
+    if (!pet) return unavailable("Animal indisponível");
+    const current = card || {};
+    const field = (label, key, limit) =>
+      `<label>${label}<textarea class="control" name="${key}" maxlength="${limit}" rows="2">${esc(current[key] || "")}</textarea></label>`;
+    setPage(shell("Carteirinha de " + pet.name, "Guarde informações importantes do seu pet para consultas futuras.",
+      `<a class="back-link" href="${url("animal", id)}">‹ Voltar ao animal</a>
+      <section class="pet-health-summary"><span class="tag">${esc(species[pet.species] || "Pet")}</span><h2>${esc(pet.name)}</h2><p>${esc(pet.breed || "Raça não informada")}</p><p class="hint">Dados privados: somente esta conta pode visualizar e editar esta carteirinha.</p></section>
+      <form class="form form-page" id="real-pet-card-form" data-pet="${esc(id)}">
+        <div class="form-grid">
+          <label>Data de nascimento<input class="control" type="date" name="birth_date" value="${esc(current.birth_date || "")}"></label>
+          <label>Peso (kg)<input class="control" type="text" inputmode="decimal" name="weight_kg" maxlength="8" placeholder="Ex.: 12,5" value="${esc(current.weight_kg || "")}"></label>
+          <label class="full">Microchip / identificação<input class="control" name="microchip" maxlength="40" value="${esc(current.microchip || "")}" autocomplete="off"></label>
+          ${field("Histórico de vacinas (preenchimento manual)", "vaccines", 500)}
+          ${field("Alergias conhecidas", "allergies", 500)}
+          ${field("Medicamentos informados pelo tutor", "medications", 500)}
+          ${field("Observações", "notes", 600)}
+        </div><p class="form-error" role="alert"></p>
+        <div class="actions"><button class="btn primary" type="submit">Salvar carteirinha</button><a class="btn secondary" href="${url("agenda", id)}">Ver agenda</a></div>
+        <p class="hint">Este registro é informativo e não substitui carteira de vacinação, prontuário ou orientação veterinária.</p>
+      </form>`, true), "Carteirinha do pet");
+  }
+  async function careAgenda(petId, ticket) {
+    if (!localPreview) return unavailable("Agenda indisponível");
+    const [pets, entries] = await Promise.all([D.listOwnPets(), D.listCareEvents()]);
+    if (ticket !== generation) return;
+    if (petId && !pets.some((pet) => pet.id === petId)) return unavailable("Animal indisponível");
+    const today = new Date().toLocaleDateString("en-CA");
+    const petsMap = new Map(pets.map((p) => [p.id, p.name]));
+    const filtered = entries.filter((entry) => !petId || entry.pet_id === petId)
+      .sort((a, b) => Boolean(a.completed_at) - Boolean(b.completed_at) || a.date.localeCompare(b.date));
+    const cards = filtered.map((entry) => {
+      const late = !entry.completed_at && entry.date < today;
+      const status = entry.completed_at ? "Concluído" : late ? "Atrasado" : "Agendado";
+      const stamp = new Date(entry.date + "T12:00:00").toLocaleDateString("pt-BR");
+      return `<article class="care-event"><div><span class="tag">${esc(careKinds[entry.category] || "Cuidados")}</span><span class="tag">${status}</span></div><h3>${esc(entry.title)}</h3><p><strong>${esc(petsMap.get(entry.pet_id) || "Meu pet")}</strong> · ${esc(stamp)}</p>${entry.notes ? `<p>${esc(entry.notes)}</p>` : ""}<div class="actions"><button type="button" class="btn secondary small" data-action="care-toggle" data-id="${esc(entry.id)}" data-done="${entry.completed_at ? "false" : "true"}">${entry.completed_at ? "Reabrir" : "Marcar concluído"}</button><button type="button" class="btn danger small" data-action="care-delete" data-id="${esc(entry.id)}">Excluir</button></div></article>`;
+    }).join("");
+    setPage(shell("Agenda de cuidados", "Organize os próximos cuidados com os seus animais.",
+      `<div class="actions"><a class="btn secondary" href="#meus-animais">Meus animais</a>${petId ? '<a class="btn secondary" href="#agenda">Ver todos</a>' : ""}</div>
+      ${pets.length ? `<form class="form form-page" id="real-care-form" data-return="${esc(petId || "")}">
+        <h2 class="section-heading">Adicionar compromisso</h2>
+        <div class="form-grid">
+        <label>Animal *<select class="control" name="pet_id" required>${pets.map((pet) => `<option value="${esc(pet.id)}" ${pet.id === petId ? "selected" : ""}>${esc(pet.name)}</option>`).join("")}</select></label>
+        <label>Tipo *<select class="control" name="category" required>${Object.entries(careKinds).map(([key, label]) => `<option value="${key}">${label}</option>`).join("")}</select></label>
+        <label>Data *<input type="date" class="control" name="date" value="${today}" required></label>
+        <label class="full">Título *<input class="control" name="title" minlength="3" maxlength="100" placeholder="Ex.: Consulta de rotina" required></label>
+        <label class="full">Observações<textarea class="control" name="notes" maxlength="300" rows="2" placeholder="Horário combinado ou informações úteis"></textarea></label>
+        </div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Salvar compromisso</button></form>` : '<p>Cadastre um animal para começar a utilizar a agenda.</p><a class="btn primary" href="#novo-animal">Cadastrar animal</a>'}
+      <section aria-labelledby="care-list-title"><h2 id="care-list-title" class="section-heading">Compromissos</h2>
+        ${filtered.length ? `<div class="care-list">${cards}</div>` : '<p class="hint">Nenhum cuidado registrado para este filtro.</p>'}
+      </section><p class="hint">Os compromissos ficam neste navegador. O BuscaPet não envia lembretes automáticos nesta versão.</p>`, true), "Agenda de cuidados");
+  }
   async function occurrenceForm(id, type, ticket) {
     const [pets, row] = await Promise.all([D.listOwnPets(), id ? D.getOccurrence(id) : Promise.resolve(null)]);
     if (ticket !== generation) return;
