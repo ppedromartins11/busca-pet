@@ -52,9 +52,16 @@ test("empresa se cadastra pendente, acessa perfil e não tem poder administrativ
   assert.equal(app.auth.hasRole("parceiro"), true);
   assert.equal(app.auth.hasRole("administrador"), false);
   assert.equal(app.permissions.can("viewAdminDashboard"), false);
-  assert.equal(app.permissions.can("publishAlert"), false);
+  assert.equal(app.permissions.can("publishAlert"), true);
+  assert.equal(app.auth.hasRole("tutor"), true);
   await assert.rejects(app.store.localAdminSnapshot(), /administração/);
-  await assert.rejects(app.store.listOwnPets(), /conta de tutor/);
+  assert.equal((await app.store.listOwnPets()).length, 0);
+  const pet = await app.store.createPet({ name: "Mascote da loja", species: "dog" });
+  assert.equal(pet.owner_id, app.auth.getCurrentUser().id);
+  const alert = await app.store.createOccurrence({ type: "found", pet_id: pet.id,
+    visibility: "public", city: "Campo Grande", region: "Centro",
+    last_seen_at: new Date().toISOString(), description: "Animal encontrado perto da loja." });
+  assert.equal((await app.store.getOccurrence(alert.id)).is_owner, true);
   const own = await app.store.getOwnBusiness();
   assert.equal(own.status, "pending");
   assert.equal(own.owner_id, app.auth.getCurrentUser().id);
