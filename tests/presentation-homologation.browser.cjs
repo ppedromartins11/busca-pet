@@ -23,6 +23,7 @@ async function logIn(page, email) {
 async function capture(page, name, width) {
   if (!screenshotDir) return;
   fs.mkdirSync(screenshotDir, { recursive: true });
+  await page.evaluate(() => document.querySelector("#real-toast")?.replaceChildren());
   await page.screenshot({ path: path.join(screenshotDir, name + "-" + width + ".png"), fullPage: true });
 }
 async function assertResponsive(page, route, width) {
@@ -79,6 +80,9 @@ async function assertResponsive(page, route, width) {
         const metrics = await page.locator(".dashboard-summary-tutor b").allTextContents();
         assert.deepEqual(metrics, ["3", "2", "3", "1", "2"]);
         assert.equal(await page.locator(".dashboard-care-row").count(), 2);
+        await page.waitForFunction(() => document.querySelectorAll(".dashboard-summary-tutor").length === 1
+          && document.querySelectorAll("#real-screen .alert-cover.is-loaded").length === 3,
+          undefined, { timeout: 12000 });
         await capture(page, "painel-tutor", width);
         await assertResponsive(page, "agenda", width);
         await assertResponsive(page, "carteirinha/" + seeded.pet, width);
@@ -86,6 +90,20 @@ async function assertResponsive(page, route, width) {
         await assertResponsive(page, "publicar/lost", width);
         await assertResponsive(page, "publicar/found", width);
         if (width === 390) {
+          await page.goto(visit("editar/" + seeded.lost));
+          const alertForm = page.locator("#real-occurrence-form");
+          await alertForm.locator('[name="contact_whatsapp"]').fill("(67) 99999-1234");
+          await alertForm.locator('[name="contact_enabled"]').check();
+          await alertForm.locator('[name="rights"]').check();
+          await alertForm.locator('button[type="submit"]').click();
+          await page.getByRole("heading", { name: "Animal desaparecido", exact: true }).waitFor();
+          await page.goto(visit("cartaz/" + seeded.lost));
+          const phoneOption = page.locator("#poster-show-phone");
+          await phoneOption.waitFor();
+          const posterBefore = await page.locator("#bp-poster-canvas").evaluate((canvas) => canvas.toDataURL("image/png"));
+          await phoneOption.check();
+          const posterAfter = await page.locator("#bp-poster-canvas").evaluate((canvas) => canvas.toDataURL("image/png"));
+          assert.notEqual(posterBefore, posterAfter, "o número só pode aparecer após autorização");
           await page.goto(visit("carteirinha/" + seeded.pet));
           await page.locator('[name="microchip"]').fill("QA-019");
           await page.locator('#real-pet-card-form button[type="submit"]').click();
