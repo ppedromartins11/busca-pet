@@ -65,7 +65,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     const name = String(input.name || "").trim(), email = String(input.email || "").trim().toLowerCase();
     const password = String(input.password || "");
     if (name.length < 2 || name.length > 80) throw Error("Informe seu nome completo.");
-    if (!email.includes("@") || !email.includes(".") || email.includes(" ")) throw Error("Informe um e-mail válido.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw Error("Informe um e-mail válido.");
     if (password.length < 8 || password !== input.passwordConfirmation) throw Error("Confirme a senha com pelo menos oito caracteres.");
     if (!input.acceptTerms || !input.acceptPrivacy) throw Error("Aceite os Termos e a Política de Privacidade.");
     if (findAccount(email)) throw Error("Já existe uma conta com esse e-mail.");
