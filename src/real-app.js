@@ -434,7 +434,7 @@ import { drawPoster } from "./pet-poster.js";
     target.removeAttribute("aria-busy");
     target.innerHTML = `<span class="photo-placeholder">${icon("paw")}<small>${esc(text)}</small></span>`;
   }
-  async function showAlertPhotos(rows, ticket) {
+  async function showAlertPhotos(rows, ticket, eager = false) {
     if (!rows.length) return;
     let metadata;
     try { metadata = await D.listPublicCoverPhotos(rows.map((row) => row.id)); }
@@ -494,7 +494,7 @@ import { drawPoster } from "./pet-poster.js";
       queue.push(entry);
       next();
     };
-    if (!("IntersectionObserver" in window)) { queuedTargets.forEach(enqueue); return; }
+    if (eager || !("IntersectionObserver" in window)) { queuedTargets.forEach(enqueue); return; }
     const targetRecords = new Map(queuedTargets.map((entry) => [entry.target, entry]));
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) if (entry.isIntersecting) {
@@ -984,7 +984,7 @@ import { drawPoster } from "./pet-poster.js";
         ${occurrencesMarkup}
       </section>`), "Minha área");
     if (occurrencesAvailable && occurrences.length)
-      void showAlertPhotos(occurrences.filter((row) => row.visibility === "public"), ticket);
+      void showAlertPhotos(occurrences.filter((row) => row.visibility === "public"), ticket, true);
   }
   function metric(value) {
     const number = Number(value);
