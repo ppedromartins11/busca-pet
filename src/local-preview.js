@@ -378,8 +378,8 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     async listOwnOccurrences() { return copy(read().occurrences.filter((row) => row.owner_id === requireSession())); },
     async getOccurrence(id) {
       const row = read().occurrences.find((item) => item.id === id);
-      return row && (row.visibility === "public" || (row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole())))
-        ? { ...copy(row), is_owner: row.owner_id === currentId() && ["tutor", "admin"].includes(currentRole()) } : null;
+      return row && (row.visibility === "public" || (row.owner_id === currentId() && ["tutor", "admin", "partner"].includes(currentRole())))
+        ? { ...copy(row), is_owner: row.owner_id === currentId() && ["tutor", "admin", "partner"].includes(currentRole()) } : null;
     },
     async createOccurrence(input) {
       const data = read();
