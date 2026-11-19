@@ -46,6 +46,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
     });
     return {
       ...initial(),
+      demoExamplesVersion: 1,
       pets: [
         pet(ids.hex, "Hex", "Pelagem clara", "medium"),
         pet(ids.bold, "Bold", "Pelagem escura", "medium"),
@@ -104,7 +105,22 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
         localStorage.setItem(KEY, JSON.stringify(data));
         return data;
       }
-      return { ...initial(), ...JSON.parse(stored) };
+      const data = { ...initial(), ...JSON.parse(stored) };
+      if (data.demoExamplesVersion !== 1) {
+        const examples = sampleData();
+        for (const [key, idKey] of [
+          ["pets", "id"], ["occurrences", "id"], ["sightings", "id"],
+          ["petPhotos", "id"], ["occurrencePhotos", "id"],
+          ["occurrencePoints", "occurrence_id"], ["sightingPoints", "sighting_id"],
+          ["reports", "id"],
+        ]) {
+          const known = new Set(data[key].map((row) => row[idKey]));
+          data[key].push(...examples[key].filter((row) => !known.has(row[idKey])));
+        }
+        data.demoExamplesVersion = 1;
+        localStorage.setItem(KEY, JSON.stringify(data));
+      }
+      return data;
     } catch { throw Error("Não foi possível ler os dados deste dispositivo."); }
   };
   const write = (data) => {
@@ -469,7 +485,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
       request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
-    localStorage.setItem(KEY, JSON.stringify(initial()));
+    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1 }));
     sessionStorage.removeItem(SESSION);
     sessionStorage.removeItem(SESSION_ID);
     sessionStorage.removeItem(RESET_ID);
