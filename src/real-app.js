@@ -1,6 +1,7 @@
 /* Interface conectada: dados reais via publishable key, Auth e RLS. */
 import { createSearchMap, createPointPicker, MAP_CATEGORY_META } from "./search-map.js";
 import hexPhotoUrl from "../assets/hex.png";
+import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearby-services.js";
 
 (() => {
   "use strict";
@@ -297,12 +298,56 @@ import hexPhotoUrl from "../assets/hex.png";
     requestAnimationFrame(() => mapController?.invalidateSize());
     void loadRealMapPoints();
   }
+  const onlyDialable = (value) => /^[+0-9 ()-]{8,30}$/.test(String(value || ""));
+  function serviceCards(rows) {
+    return rows.length
+      ? '<div class="support-categories">' + rows.map((service) => {
+          const tel = onlyDialable(service.phone) ? String(service.phone).replace(/[^+\d]/g, "") : "";
+          const target = service.mapLink || mapUrl(service.address);
+          return `<article class="service-card"><span class="tag">${esc(service.type)}</span><h3>${esc(service.name)}</h3><p>${esc(service.address)}</p>${Number.isFinite(service.distance) ? `<p><strong>${service.distance.toFixed(1).replace(".", ",")} km</strong> em linha reta</p>` : ""}<div class="actions">${tel ? `<a class="btn secondary small" href="tel:${esc(tel)}">Ligar: ${esc(service.phone)}</a>` : ""}<a class="btn secondary small" href="${esc(target)}" target="_blank" rel="noopener noreferrer">Ver no mapa</a>${service.website ? `<a class="btn plain small" href="${esc(service.website)}" target="_blank" rel="noopener noreferrer">Site</a>` : ""}</div></article>`;
+        }).join("") + "</div>"
+      : '<p>Nenhum serviço com cadastro público foi encontrado neste raio. Você ainda pode consultar outros locais no mapa.</p>';
+  }
   function servicesPage() {
     destroyMap();
-    const previewSupport = localPreview
-      ? '<div class="support-categories"><article><h3>Clínica veterinária</h3><p>Apoio com orientações para animais encontrados e identificação de tutores.</p><small>Parceiro ilustrativo</small></article><article><h3>Pet shop de bairro</h3><p>Divulgação de cartazes e alertas em locais movimentados.</p><small>Parceiro ilustrativo</small></article><article><h3>Voluntários da comunidade</h3><p>Ajuda na divulgação e nas buscas com segurança.</p><small>Grupo ilustrativo</small></article></div><p class="hint">Exemplos para apresentação, sem estabelecimentos ou contatos reais.</p>'
-      : '<p>Não há colaboradores, clínicas veterinárias ou pet shops cadastrados para exibição no momento. Quando um contato autorizar a divulgação, ele aparecerá nesta página.</p>';
-    setPage(shell("Rede de apoio", "Encontre formas seguras de ajudar e fortaleça a busca na sua comunidade.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Divulgue o alerta na região indicada, confira pontos próximos com segurança e informe um avistamento com data, horário e referência.</p></div><a class="btn primary" href="#mapa">${icon("map")}Ver pontos no mapa</a></section><section class="support-categories" aria-label="Categorias de apoio"><article>${icon("search")}<h2>Divulgação local</h2><p>Compartilhe o alerta em grupos de bairro, condomínios e comércios, sempre usando as informações públicas.</p></article><article>${icon("paw")}<h2>Busca em campo</h2><p>Ajude a percorrer a região em horários combinados. Não entre em locais privados nem se exponha a riscos.</p></article><article>${icon("heart")}<h2>Acolhimento temporário</h2><p>Se encontrar um animal, mantenha-o em segurança e registre a ocorrência para aproximar o tutor.</p></article></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Colaboradores e parceiros</h2>${previewSupport}<h2>Orientações para apoiar um tutor</h2><p>Evite publicar endereço residencial, telefone ou localização exata. Compartilhe somente a referência informada no alerta e encaminhe pistas pelo BuscaPet.</p></section>`, false), "Rede de apoio");
+    setPage(shell("Rede de apoio", "Localize clínicas veterinárias e pet shops e encontre formas de ajudar.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Compartilhe alertas na região, consulte estabelecimentos e envie informações úteis ao tutor.</p></div><a class="btn primary" href="#mapa">${icon("map")}Mapa da busca</a></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Clínicas e pet shops</h2><p>Encontre serviços próximos com sua autorização de localização ou consulte estabelecimentos de Campo Grande (MS) com contatos publicados. A listagem não significa vínculo comercial com o BuscaPet.</p><div class="actions"><button class="btn primary" type="button" data-action="find-nearby-services">Encontrar perto de mim</button><a class="btn secondary" href="${mapUrl("clínica veterinária pet shop Campo Grande MS")}" target="_blank" rel="noopener noreferrer">Buscar no mapa</a></div><p class="hint" id="service-search-status" role="status" aria-live="polite">Mostrando serviços com informações públicas de Campo Grande (MS). A localização do dispositivo só será solicitada ao tocar no botão e não será salva.</p><div id="service-results">${serviceCards(localServices)}</div><p class="hint" id="service-map-fallback"></p><h2>Orientações para apoiar um tutor</h2><p>Não publique endereço residencial nem localização exata do animal. Informe data, bairro e características do avistamento e evite abordagens que possam assustá-lo.</p></section>`, false), "Rede de apoio");
+  }
+  function findNearbyOnRequest(button) {
+    const status = document.querySelector("#service-search-status");
+    const result = document.querySelector("#service-results");
+    const fallback = document.querySelector("#service-map-fallback");
+    if (!status || !result) return;
+    if (!navigator.geolocation) {
+      status.textContent = "Seu navegador não permite obter a localização. Use a busca no mapa.";
+      return;
+    }
+    const ticket = generation;
+    button.disabled = true;
+    status.textContent = "Localizando serviços. Autorize sua localização no navegador, se solicitado.";
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        const href = nearbyMapUrl(latitude, longitude);
+        const services = await findNearbyServices(latitude, longitude);
+        if (ticket !== generation || !result.isConnected) return;
+        result.innerHTML = serviceCards(services);
+        status.textContent = services.length
+          ? `Serviços próximos encontrados: ${services.length}. Ordenados por distância aproximada.`
+          : "Nenhum serviço localizado no raio consultado. Confira outros estabelecimentos pelo mapa.";
+        if (fallback) fallback.innerHTML = `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Ver mais opções no Google Maps</a>. Confira contatos e horários com cada estabelecimento.`;
+      } catch {
+        if (ticket !== generation || !result.isConnected) return;
+        result.innerHTML = '<p>Não foi possível consultar a lista próxima agora. Use a pesquisa no mapa para consultar estabelecimentos da sua região.</p>';
+        status.textContent = "Consulta de proximidade temporariamente indisponível.";
+        if (fallback) fallback.innerHTML = `<a href="${esc(nearbyMapUrl(position.coords.latitude, position.coords.longitude))}" target="_blank" rel="noopener noreferrer">Pesquisar serviços na região pelo Google Maps</a>`;
+      } finally {
+        if (button.isConnected) button.disabled = false;
+      }
+    }, () => {
+      if (ticket !== generation) return;
+      status.textContent = "Localização não autorizada ou indisponível. Você pode continuar com a lista de Campo Grande ou buscar sua cidade no mapa.";
+      if (button.isConnected) button.disabled = false;
+    }, { enableHighAccuracy: false, maximumAge: 300000, timeout: 12000 });
   }
   function pointPickerMarkup(kind) {
     const occurrence = kind === "occurrence";
@@ -1586,6 +1631,8 @@ import hexPhotoUrl from "../assets/hex.png";
         await adminOccurrenceDetails(routeInfo().detailId, generation);
       } else if (action === "admin-account-status") {
         adminAccountStatusDialog(target.dataset.id, target.dataset.name || "Conta", target.dataset.status);
+      } else if (action === "find-nearby-services") {
+        findNearbyOnRequest(target);
       } else if (action === "apply-map-filters" || action === "refresh-map") {
         await loadRealMapPoints({ useViewport: action === "refresh-map" });
       } else if (action === "locate-point") {
