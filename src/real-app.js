@@ -865,7 +865,7 @@ import { drawPoster } from "./pet-poster.js";
     const [pets, entries] = await Promise.all([D.listOwnPets(), D.listCareEvents()]);
     if (ticket !== generation) return;
     if (petId && !pets.some((pet) => pet.id === petId)) return unavailable("Animal indisponível");
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = nowLocal().slice(0, 10);
     const petsMap = new Map(pets.map((p) => [p.id, p.name]));
     const filtered = entries.filter((entry) => !petId || entry.pet_id === petId)
       .sort((a, b) => Boolean(a.completed_at) - Boolean(b.completed_at) || a.date.localeCompare(b.date));
