@@ -463,7 +463,7 @@ import { drawPoster } from "./pet-poster.js";
             const image = document.createElement("img");
             image.className = "alert-cover";
             image.alt = "Foto do alerta de animal";
-            image.loading = "lazy";
+            image.loading = eager ? "eager" : "lazy";
             image.decoding = "async";
             image.addEventListener("load", () => {
               image.classList.add("is-loaded");
