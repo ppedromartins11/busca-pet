@@ -310,9 +310,34 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
         }).join("") + "</div>"
       : '<p>Nenhum serviço com cadastro público foi encontrado neste raio. Você ainda pode consultar outros locais no mapa.</p>';
   }
+
+  function registeredBusinessCard(item) {
+    const phone = String(item.phone || "").replace(/\\D/g, "");
+    const address = [item.address, item.region, item.city].filter(Boolean).join(", ");
+    const search = [item.name, item.category, item.description, item.region, item.city].join(" ").toLocaleLowerCase("pt-BR");
+    return `<article class="service-card" data-registered-business data-search="${esc(search)}"><span class="tag">${esc(businessKinds[item.category] || "Serviços pet")}</span><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><p>${esc(address)}</p><div class="actions"><a class="btn secondary small" href="${esc(mapUrl(address))}" target="_blank" rel="noopener noreferrer">Ver endereço</a>${phone ? `<a class="btn secondary small" href="tel:+${esc(phone)}">Ligar</a><a class="btn secondary small" href="https://wa.me/${esc(phone)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ""}${item.website ? `<a class="btn plain small" href="${esc(item.website)}" target="_blank" rel="noopener noreferrer">Site</a>` : ""}</div></article>`;
+  }
+  async function loadRegisteredBusinesses(ticket = generation) {
+    const results = document.querySelector("#registered-business-results");
+    if (!localPreview || !results) return;
+    try {
+      const rows = await D.listApprovedBusinesses();
+      if (ticket !== generation || !results.isConnected) return;
+      results.innerHTML = rows.length ? `<div class="support-categories">${rows.map(registeredBusinessCard).join("")}</div>`
+        : '<p>Nenhuma empresa cadastrada foi aprovada neste dispositivo. Os estabelecimentos listados acima são independentes do BuscaPet.</p>';
+      const filter = document.querySelector("#registered-business-filter");
+      if (filter) filter.hidden = rows.length === 0;
+      if (filter?.closest("label")) filter.closest("label").hidden = rows.length === 0;
+      document.querySelector("#registered-business-count").textContent =
+        `${rows.length} ${rows.length === 1 ? "empresa cadastrada" : "empresas cadastradas"}`;
+    } catch {
+      if (ticket === generation && results.isConnected) results.textContent = "Não foi possível carregar os cadastros comerciais.";
+    }
+  }
   function servicesPage() {
     destroyMap();
-    setPage(shell("Rede de apoio", "Localize clínicas veterinárias e pet shops e encontre formas de ajudar.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Compartilhe alertas na região, consulte estabelecimentos e envie informações úteis ao tutor.</p></div><a class="btn primary" href="#mapa">${icon("map")}Mapa da busca</a></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Clínicas e pet shops</h2><p>Encontre serviços próximos com sua autorização de localização ou consulte estabelecimentos de Campo Grande (MS) com contatos publicados. Os estabelecimentos listados são independentes do BuscaPet; confirme informações e disponibilidade antes de visitar.</p><div class="actions"><button class="btn primary" type="button" data-action="find-nearby-services">Encontrar perto de mim</button><a class="btn secondary" href="${mapUrl("clínica veterinária pet shop Campo Grande MS")}" target="_blank" rel="noopener noreferrer">Buscar no mapa</a></div><p class="hint" id="service-search-status" role="status" aria-live="polite">Mostrando serviços com informações públicas de Campo Grande (MS). A localização só será solicitada ao tocar no botão; será consultada no OpenStreetMap e não será salva no BuscaPet.</p><div id="service-results">${serviceCards(localServices)}</div><p class="hint" id="service-map-fallback"></p><h2>Orientações para apoiar um tutor</h2><p>Não publique endereço residencial nem localização exata do animal. Informe data, bairro e características do avistamento e evite abordagens que possam assustá-lo.</p></section>`, false), "Rede de apoio");
+    setPage(shell("Rede de apoio", "Localize clínicas veterinárias e pet shops e encontre formas de ajudar.", `<section class="support-intro"><div><h2>Como você pode ajudar</h2><p>Compartilhe alertas na região, consulte estabelecimentos e envie informações úteis ao tutor.</p></div><a class="btn primary" href="#mapa">${icon("map")}Mapa da busca</a></section><section class="support-directory" aria-labelledby="partners-heading"><h2 id="partners-heading">Clínicas e pet shops</h2><p>Encontre serviços próximos com sua autorização de localização ou consulte estabelecimentos de Campo Grande (MS) com contatos publicados. Os estabelecimentos listados são independentes do BuscaPet; confirme informações e disponibilidade antes de visitar.</p><div class="actions"><button class="btn primary" type="button" data-action="find-nearby-services">Encontrar perto de mim</button><a class="btn secondary" href="${mapUrl("clínica veterinária pet shop Campo Grande MS")}" target="_blank" rel="noopener noreferrer">Buscar no mapa</a></div><p class="hint" id="service-search-status" role="status" aria-live="polite">Mostrando serviços com informações públicas de Campo Grande (MS). A localização só será solicitada ao tocar no botão; será consultada no OpenStreetMap e não será salva no BuscaPet.</p><div id="service-results">${serviceCards(localServices)}</div><p class="hint" id="service-map-fallback"></p><section class="support-directory" aria-labelledby="registered-business-heading"><h2 id="registered-business-heading">Empresas cadastradas no BuscaPet</h2><p>Empresas solicitam cadastro e aparecem nesta área depois da aprovação administrativa.</p><div class="actions"><a class="btn primary" href="#cadastro-empresa">Cadastrar minha empresa</a></div><p id="registered-business-count" class="hint" role="status">Consultando empresas cadastradas...</p><label id="registered-business-filter-label" hidden>Buscar empresa ou cidade<input class="control" id="registered-business-filter" type="search" maxlength="100" placeholder="Nome, serviço, cidade ou bairro" hidden></label><div id="registered-business-results" aria-live="polite"><p>Carregando empresas...</p></div></section><h2>Orientações para apoiar um tutor</h2><p>Não publique endereço residencial nem localização exata do animal. Informe data, bairro e características do avistamento e evite abordagens que possam assustá-lo.</p></section>`, false), "Rede de apoio");
+    if (localPreview) void loadRegisteredBusinesses(generation);
   }
   function findNearbyOnRequest(button) {
     const status = document.querySelector("#service-search-status");
@@ -1862,6 +1887,17 @@ import { localServices, mapUrl, nearbyMapUrl, findNearbyServices } from "./nearb
     } catch (error) { message(fail(error)); }
   }
   function onInput(event) {
+    if (event.target.id === "registered-business-filter" && localPreview) {
+      const search = event.target.value.toLocaleLowerCase("pt-BR").trim();
+      let visible = 0;
+      for (const card of document.querySelectorAll("[data-registered-business]")) {
+        card.hidden = search !== "" && !card.dataset.search.includes(search);
+        if (!card.hidden) visible++;
+      }
+      const count = document.querySelector("#registered-business-count");
+      if (count) count.textContent = visible + (visible === 1 ? " empresa encontrada" : " empresas encontradas");
+      return;
+    }
     if (localPreview && event.target.matches("[data-admin-filter]")) {
       const area = event.target.closest(".local-admin-area");
       const values = Object.fromEntries([...area.querySelectorAll("[data-admin-filter]")].map((input) => [input.dataset.adminFilter, input.value.toLocaleLowerCase("pt-BR").trim()]));
