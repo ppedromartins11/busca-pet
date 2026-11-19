@@ -472,7 +472,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       return copy({ id: row.id, type: row.type, status: row.status, city: row.city, region: row.region,
         public_reference: row.public_reference, description: row.description, last_seen_at: row.last_seen_at,
         pet_name: pet?.name || "", species: pet?.species || "", size: pet?.size || "",
-        contact_whatsapp: row.contact_enabled === true ? row.contact_whatsapp : null,
+        contact_whatsapp: row.contact_enabled === true && row.owner_id === currentId() && currentRole() ? row.contact_whatsapp : null,
         photo_path: cover?.storage_path || null });
     },
     async listPossibleMatches(occurrenceId) {
@@ -483,7 +483,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       const permitted = data.occurrences.filter((row) => row.visibility === "public" && row.status === "active");
       const pets = data.pets.map(({ id, species, size, breed, coat_description }) =>
         ({ id, species, size, breed, coat_description }));
-      return copy(possibleMatches(reference, permitted, pets));
+      return copy(possibleMatches(reference, permitted, pets).map(({ occurrence, score, reasons }) =>
+        ({ occurrence: { id: occurrence.id, type: occurrence.type, status: occurrence.status,
+          visibility: occurrence.visibility, city: occurrence.city, region: occurrence.region,
+          public_reference: occurrence.public_reference, description: occurrence.description,
+          last_seen_at: occurrence.last_seen_at }, score, reasons })));
     },
     async listOwnPets() { return copy(read().pets.filter((row) => row.owner_id === requireSession())); },
     async getPet(id) { return copy(mine(read().pets, id)); },
