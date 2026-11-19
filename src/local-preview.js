@@ -11,9 +11,117 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
   const SAMPLE_ADMIN = { id: ADMIN_ID, name: "Administrador BuscaPet", email: "admin@buscapet.test", role: "admin", status: "active" };
   const listeners = new Set();
   const initial = () => ({ pets: [], occurrences: [], sightings: [], petPhotos: [], occurrencePhotos: [], occurrencePoints: [], sightingPoints: [], reports: [], adminHistory: [], tutorStatus: "active", accounts: [] });
+  // Exemplos fictícios da apresentação. Todos os dados continuam apenas neste navegador.
+  const demoPhotos = Object.freeze({
+    "example/hex.png": new URL("../assets/hex.png", import.meta.url).href,
+    "example/bold.png": new URL("../assets/bold.png", import.meta.url).href,
+    "example/gargamel.png": new URL("../assets/gargamel.png", import.meta.url).href,
+  });
+  const sampleData = () => {
+    const ago = (days) => new Date(Date.now() - days * 86400000).toISOString();
+    const ids = {
+      hex: "10000000-0000-4000-8000-000000000001",
+      bold: "10000000-0000-4000-8000-000000000002",
+      gargamel: "10000000-0000-4000-8000-000000000003",
+      lost: "20000000-0000-4000-8000-000000000001",
+      found: "20000000-0000-4000-8000-000000000002",
+      reunited: "20000000-0000-4000-8000-000000000003",
+      reviewed: "30000000-0000-4000-8000-000000000001",
+      pending: "30000000-0000-4000-8000-000000000002",
+    };
+    const pet = (id, name, coat, size) => ({
+      id, owner_id: USER_ID, name, species: "dog", breed: "Sem raça definida",
+      sex: "unknown", size, coat_description: coat,
+      distinctive_features: "Animal cadastrado para a apresentação do BuscaPet.",
+      created_at: ago(24), updated_at: ago(3),
+    });
+    const occurrence = (id, petId, type, status, city, region, reference, description, days) => ({
+      id, owner_id: USER_ID, pet_id: petId, type, status, visibility: "public",
+      city, region, public_reference: reference, description,
+      reward_cents: 0, last_seen_at: ago(days), created_at: ago(days), updated_at: ago(days),
+    });
+    const photo = (id, key, parent, file) => ({
+      id, [key]: parent, uploaded_by: USER_ID, storage_path: "example/" + file + ".png",
+      mime_type: "image/png", byte_size: 300000, created_at: ago(20), is_cover: true,
+    });
+    return {
+      ...initial(),
+      demoExamplesVersion: 1,
+      pets: [
+        pet(ids.hex, "Hex", "Pelagem clara", "medium"),
+        pet(ids.bold, "Bold", "Pelagem escura", "medium"),
+        pet(ids.gargamel, "Gargamel", "Pelagem curta", "small"),
+      ],
+      occurrences: [
+        occurrence(ids.lost, ids.hex, "lost", "active", "Campo Grande", "Carandá Bosque",
+          "Próximo ao Parque das Nações Indígenas", "Hex desapareceu na região do parque. É dócil e pode estar assustado. Alerta fictício para apresentação.", 2),
+        occurrence(ids.found, ids.bold, "found", "active", "Campo Grande", "Centro",
+          "Proximidades da Praça Ary Coelho", "Um cão foi encontrado na região central. Procuramos a família responsável. Registro fictício para apresentação.", 4),
+        occurrence(ids.reunited, ids.gargamel, "lost", "reunited", "Campo Grande", "Amambai",
+          "Região da Orla Morena", "Gargamel foi localizado e voltou para casa. Exemplo de busca encerrada com sucesso.", 9),
+      ],
+      petPhotos: [
+        photo("40000000-0000-4000-8000-000000000001", "pet_id", ids.hex, "hex"),
+        photo("40000000-0000-4000-8000-000000000002", "pet_id", ids.bold, "bold"),
+        photo("40000000-0000-4000-8000-000000000003", "pet_id", ids.gargamel, "gargamel"),
+      ],
+      occurrencePhotos: [
+        photo("50000000-0000-4000-8000-000000000001", "occurrence_id", ids.lost, "hex"),
+        photo("50000000-0000-4000-8000-000000000002", "occurrence_id", ids.found, "bold"),
+        photo("50000000-0000-4000-8000-000000000003", "occurrence_id", ids.reunited, "gargamel"),
+      ],
+      occurrencePoints: [
+        { occurrence_id: ids.lost, latitude: -20.4505, longitude: -54.5767, radius_m: 900, public_description: "Região do Parque das Nações Indígenas" },
+        { occurrence_id: ids.found, latitude: -20.4631, longitude: -54.6152, radius_m: 900, public_description: "Região da Praça Ary Coelho" },
+        { occurrence_id: ids.reunited, latitude: -20.4650, longitude: -54.6310, radius_m: 900, public_description: "Região da Orla Morena" },
+      ],
+      sightings: [
+        { id: ids.reviewed, occurrence_id: ids.lost, reporter_id: USER_ID,
+          observed_at: ago(1), area_description: "Próximo à entrada do parque",
+          direction: "Seguindo em direção à avenida", description: "Um cão parecido foi visto caminhando perto da entrada.",
+          status: "reviewed", created_at: ago(1) },
+        { id: ids.pending, occurrence_id: ids.lost, reporter_id: USER_ID,
+          observed_at: ago(0.5), area_description: "Ruas próximas ao Carandá Bosque",
+          direction: "Não informada", description: "Morador relatou ter visto um animal parecido.",
+          status: "pending", created_at: ago(0.5) },
+      ],
+      sightingPoints: [
+        { sighting_id: ids.reviewed, latitude: -20.4487, longitude: -54.5742, radius_m: 900,
+          public_description: "Região aproximada do avistamento no parque", approved_by_tutor: true },
+      ],
+      reports: [
+        { id: "60000000-0000-4000-8000-000000000001", occurrence_id: ids.found,
+          reporter_id: USER_ID, category: "other",
+          description: "Denúncia fictícia para demonstrar a análise e a moderação de alertas.",
+          report_status: "open", created_at: ago(0.7), test_record: true },
+      ],
+    };
+  };
   const read = () => {
-    try { return { ...initial(), ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
-    catch { throw Error("Não foi possível ler os dados deste dispositivo."); }
+    try {
+      const stored = localStorage.getItem(KEY);
+      if (stored === null) {
+        const data = sampleData();
+        localStorage.setItem(KEY, JSON.stringify(data));
+        return data;
+      }
+      const data = { ...initial(), ...JSON.parse(stored) };
+      if (data.demoExamplesVersion !== 1) {
+        const examples = sampleData();
+        for (const [key, idKey] of [
+          ["pets", "id"], ["occurrences", "id"], ["sightings", "id"],
+          ["petPhotos", "id"], ["occurrencePhotos", "id"],
+          ["occurrencePoints", "occurrence_id"], ["sightingPoints", "sighting_id"],
+          ["reports", "id"],
+        ]) {
+          const known = new Set(data[key].map((row) => row[idKey]));
+          data[key].push(...examples[key].filter((row) => !known.has(row[idKey])));
+        }
+        data.demoExamplesVersion = 1;
+        localStorage.setItem(KEY, JSON.stringify(data));
+      }
+      return data;
+    } catch { throw Error("Não foi possível ler os dados deste dispositivo."); }
   };
   const write = (data) => {
     try { localStorage.setItem(KEY, JSON.stringify(data)); }
@@ -292,6 +400,11 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       data.occurrencePhotos.push(...reused); write(data); return copy(reused);
     },
     async downloadPhoto(path) {
+      if (Object.hasOwn(demoPhotos, path)) {
+        const response = await fetch(demoPhotos[path]);
+        if (!response.ok) throw Error("Fotografia de exemplo indisponível.");
+        return response.blob();
+      }
       const blob = await photoOperation("readonly", (photoStore) => photoStore.get(path));
       if (!(blob instanceof Blob)) throw Error("Fotografia local indisponível.");
       return blob;
@@ -372,7 +485,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       request.onerror = () => reject(Error("Não foi possível remover as fotos cadastradas."));
       request.onblocked = () => reject(Error("Feche outras abas do BuscaPet e tente limpar novamente."));
     });
-    localStorage.removeItem(KEY);
+    localStorage.setItem(KEY, JSON.stringify({ ...initial(), demoExamplesVersion: 1 }));
     sessionStorage.removeItem(SESSION);
     sessionStorage.removeItem(SESSION_ID);
     sessionStorage.removeItem(RESET_ID);
