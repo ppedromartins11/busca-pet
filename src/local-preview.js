@@ -1,6 +1,4 @@
 // Explicit, browser-only preview for the modern UI. It never calls Supabase.
-import { possibleMatches } from "./pet-matching.js";
-
 if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LOCAL_PREVIEW === "true") && !window.BPSupabase?.configured) {
   const KEY = "bp.modern-preview.v1";
   const SESSION = "bp.modern-preview.session";
@@ -483,7 +481,7 @@ if ((import.meta.env.MODE === "presentation" || import.meta.env.VITE_BUSCAPET_LO
       const permitted = data.occurrences.filter((row) => row.visibility === "public" && row.status === "active");
       const pets = data.pets.map(({ id, species, size, breed, coat_description }) =>
         ({ id, species, size, breed, coat_description }));
-      return copy(possibleMatches(reference, permitted, pets).map(({ occurrence, score, reasons }) =>
+      return copy((window.BPMatch?.possibleMatches?.(reference, permitted, pets) || []).map(({ occurrence, score, reasons }) =>
         ({ occurrence: { id: occurrence.id, type: occurrence.type, status: occurrence.status,
           visibility: occurrence.visibility, city: occurrence.city, region: occurrence.region,
           public_reference: occurrence.public_reference, description: occurrence.description,
