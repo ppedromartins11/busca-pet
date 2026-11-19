@@ -48,7 +48,8 @@ test("a apresentacao começa com alertas e fotos de exemplo", async () => {
   assert.equal(occurrences.length, 3);
   assert.deepEqual(occurrences.map((o) => o.type).sort(), ["found", "lost", "lost"]);
   assert.ok(occurrences.every((o) => o.city === "Campo Grande"));
-  assert.ok(occurrences.every((o) => /exemplo|fictício|fictícia/i.test(o.description)));
+  assert.ok(occurrences.every((o) => !/exemplo|fictício|fictícia/i.test(o.description)));
+  assert.ok(occurrences.every((o) => o.description.length >= 40));
 
   const covers = await app.data.listPublicCoverPhotos(occurrences.map((o) => o.id));
   assert.equal(covers.length, 3);
