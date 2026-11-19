@@ -71,7 +71,7 @@ test("fotos e coordenadas privadas permanecem sob a identidade proprietária", a
   assert.ok(await app.store.getOccurrencePublicLocation(privateRow.id));
   await app.auth.signOut();
   assert.equal(await app.store.getOccurrencePublicLocation(privateRow.id), null);
-  assert.deepEqual(await app.store.listPhotos(privateRow.id), []);
+  assert.equal((await app.store.listPhotos(privateRow.id)).length, 0);
   await admin(app);
   await assert.rejects(app.store.listPetPhotos(petId), /Animal não encontrado/);
   await assert.rejects(app.store.downloadPhoto(ownPhotos[0].storage_path + "-invalido"), /Fotografia não disponível/);
