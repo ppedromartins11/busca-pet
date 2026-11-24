@@ -1,5 +1,8 @@
 # Engenharia de Software aplicada ao BuscaPet
 
+> **Enquadramento da entrega de 24/11/2026:** este documento conserva a organização didática por aulas de Engenharia de Software, mas foi redigido antes do fechamento funcional da apresentação atual. Para descrever o BuscaPet avaliado em **Projeto Integrador II** pelo professor informado **Odirley Franco de Oliveira**, use [o dossiê atual](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), [a matriz atualizada](MATRIZ_RASTREABILIDADE.md) e [as perguntas da defesa](PERGUNTAS_ENGENHARIA_PI2.md). O nome de docente citado abaixo refere-se ao material da disciplina de Engenharia de Software registrado historicamente, **não** identifica o avaliador do Projeto Integrador II. A aplicação publicada funciona com armazenamento local; os trechos sobre Supabase descrevem evolução preparada, não funcionalidade implantada nesta versão.
+
+
 > Referência acadêmica recuperada do commit `402a226` em 16/11/2026. A situação atual e os resultados executados estão na [matriz](MATRIZ_RASTREABILIDADE.md) e no [relatório de verificação](VERIFICACAO_ACADEMICA_2026-11-16.md). As aulas originais não estavam no checkout; a correspondência abaixo usa os nove títulos informados na solicitação.
 
 Material técnico do projeto integrador de Análise e Desenvolvimento de Sistemas (2026), baseado nas aulas 01–08 e 11 de Engenharia de Software, ministradas por Adriano Marcelo Marques Miyashiro. O conteúdo registra decisões do projeto; não constitui certificação de segurança ou conformidade.
