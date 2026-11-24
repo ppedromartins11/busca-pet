@@ -1,5 +1,7 @@
 # Homologação isolada e demonstração do BuscaPet
 
+> **Registro histórico — não é o roteiro ou a arquitetura vigente da apresentação de 24/11/2026.** Este arquivo documenta uma etapa anterior ou decisões de desenvolvimento. Para o Projeto Integrador II, use [o dossiê atual](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), [o roteiro de apresentação](ROTEIRO_APRESENTACAO_ATUAL.md) e [a matriz atualizada](MATRIZ_RASTREABILIDADE.md). A publicação atual é um frontend Vite com persistência local; não pressupor Supabase implantado, credenciais antigas, estados de tela, contagens de testes ou sprints descritos abaixo como sendo a versão atual. O registro original foi mantido para rastreabilidade.
+
 Atualizado em 08/11/2026. Este documento registra o estado observado do checkout; não significa que haja uma URL ou backend de homologação disponível.
 
 ## Estado atual

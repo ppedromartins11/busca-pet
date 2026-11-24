@@ -1,54 +1,66 @@
-# BuscaPet — roteiro de apresentação e checklist
+# BuscaPet — roteiro final de apresentação acadêmica
 
-**Data de referência:** 19/11/2026. **Branch de apresentação:** `apresentacao-contas-2026-11-19`. **URL:** https://busca-pet-delta.vercel.app/
+**Projeto Integrador II — ADS**  
+**Professor avaliador informado:** Odirley Franco de Oliveira  
+**Revisado em:** 24/11/2026  
+**Versão funcional examinada:** `2507a68` · **site:** https://busca-pet-delta.vercel.app/
 
-## Visão geral
+Este roteiro descreve apenas a versão atualmente publicada; não confundir com o protótipo v0.5 ou a versão futura com Supabase. Os registros iniciais da aplicação são dados preparados para demonstração, não desaparecimentos confirmados. O aviso de “Ambiente de apresentação” **foi retirado da Home**; informe o escopo local verbalmente e na documentação.
 
-O BuscaPet reúne divulgação e busca por animais perdidos, avistamentos, acompanhamento de pets e visibilidade de serviços comerciais do setor. A apresentação roda em JavaScript/Vite com persistência **local no navegador**. Não depende de banco de dados, Supabase, SMTP ou conta profissional externa.
+## Antes de entrar na sala
 
-Os registros iniciais (animais Hex, Bold e Gargamel, alertas e avistamentos) servem para demonstrar as telas e não representam ocorrências reais. Estabelecimentos externos listados na Rede de Apoio não são declarados parceiros oficiais. A localização, quando solicitada, depende de autorização do usuário e serviços públicos de mapas.
+1. Abra o endereço do BuscaPet no navegador que já contém os dados preparados. Não dependa de outro celular para acessar esses cadastros.
+2. Selecione a conta de tutor ou administrador a partir das credenciais informadas abaixo; as credenciais de avaliação **não aparecem mais na tela de login**.
+3. Confira as fotos no feed, o alerta de Hex, o cartaz, o painel de tutor, a agenda, a área administrativa e a Rede de Apoio.
+4. Não acione **Minha conta → Apagar dados deste dispositivo**: essa função esvazia os registros locais e não possui restauração automática.
+5. Leve uma cópia dos dados de demonstração ou planeje recriá-los caso o navegador perca seu armazenamento. A versão publicada depende da internet para servir o site e pode precisar de rede para os mapas.
 
-## Acessos para a apresentação
+### Contas preparadas
 
-| Tipo | Credencial | O que pode demonstrar |
-| --- | --- | --- |
-| Tutor | `tutor@buscapet.test` / `BuscaPet@2026` | Pets, alertas, mapa, cartaz, carteirinha, agenda, pistas |
-| Administrador | `admin@buscapet.test` / `BuscaPet@2026` | Todas as ações do tutor + painel administrativo, decisões e empresas |
-| Empresa | Criar conta em `#cadastro-empresa` | Perfil comercial, alteração, espera de aprovação + ações de tutor |
-| Visitante | Sem login | Feed, mapa e informações de alertas públicos, serviços externos |
+| Perfil | E-mail | Senha |
+|---|---|---|
+| Tutor | `tutor@buscapet.test` | `BuscaPet@2026` |
+| Administrador | `admin@buscapet.test` | `BuscaPet@2026` |
+| Empresa | Conta criada em `#cadastro-empresa` | Senha definida na criação |
 
-Não use senha pessoal no cadastro local. Os dados cadastrados não ficam disponíveis em outros aparelhos.
+Esses acessos servem apenas para o modo local. Não são usuários do Supabase nem representam controle de acesso de servidor.
 
-## Sequência sugerida — 7 a 9 minutos
+## Sequência recomendada (aproximadamente 8 minutos)
 
-1. **Página inicial (1 min):** mostre alertas, filtro por desaparecido/encontrado, pesquisa e cards com fotos. Explique a indicação de registros de apresentação.
-2. **Alerta (1 min):** abra um dos anúncios, mostre mapa aproximado, relatos e botões **Criar cartaz** e **Possíveis correspondências**. Explique que a comparação usa dados declarados, não reconhecimento facial.
-3. **Tutor (2 min):** entre com o tutor, abra **Minha área**, confira os números, as fotos dos alertas, as pistas pendentes e os próximos compromissos. Em **Meus animais**, abra a carteirinha de Hex, edite e salve um campo.
-4. **Agenda (1 min):** acrescente um cuidado com data, marque como concluído e reabra. Mostre que permanece após recarregar a página.
-5. **Empresa (1 min):** mostre `#cadastro-empresa`, os campos e a página de perfil empresarial. Se já houver uma empresa cadastrada neste mesmo navegador, entre com ela.
-6. **Administrador (1–2 min):** entre como administrador. Mostre **Administração → Empresas** (aprovar/recusar), denúncias e moderação. Abra também **Meus animais** ou **Publicar** para mostrar que o administrador pode ser tutor.
-7. **Encerramento:** explique que a versão apresentada é uma SPA local, com autenticação e persistência de demonstração. Integração entre aparelhos, mensagens em tempo real e proteção real contra spam são evoluções posteriores.
+**1. Problema e solução (45 s).** Explique que alertas de animais perdidos ficam espalhados em diferentes canais e que o BuscaPet os organiza em uma aplicação web responsiva. Apresente a Home com fotos, busca, filtros e mapa.
 
-## Checklist de homologação
+**2. Fluxo do animal desaparecido (1 min 30 s).** Abra um alerta de desaparecimento. Mostre características, região aproximada e opção de registrar avistamento. Demonstre o cartaz PNG e as possíveis correspondências com anúncios de animais encontrados. Explique que a comparação usa regras e pontuações, não inteligência artificial.
 
-- [ ] GitHub Actions: sintaxe, testes de unidade e build aprovados no mesmo SHA
-- [ ] Browser Chromium: rotas e ausência de overflow em 320, 390, 768 e 1440 px
-- [ ] Navegador: cadastro, login e recuperação com código no modo local
-- [ ] Tutor: criar/editar pet, foto de capa, alertas e avistamentos
-- [ ] Cartaz: PNG renderizado, foto, contato oculto até consentimento e impressão
-- [ ] Carteirinha: dados salvos e isolados por conta
-- [ ] Agenda: criação, conclusão, reabertura, remoção e persistência
-- [ ] Empresas: cadastro, perfil pendente, aprovação, vitrine, telefone e mapa
-- [ ] Admin: gerir empresas, denunciar/moderar e acessar funções comuns de tutor
-- [ ] Safari no iPhone: conferência manual de toque, rolagem, formulários e salvar cartaz
-- [ ] Produção publicada: confirmar domínio, SHA e estado READY
+**3. Área do tutor (1 min 30 s).** Entre como tutor. Em **Minha área**, mostre animais, alertas, avistamentos pendentes e próximos compromissos; em **Meus animais**, abra Hex e sua **Carteirinha digital**. Demonstre uma edição simples e salvamento.
 
-Não marque como validado um item não testado. Os arquivos da pipeline fornecem evidência para Chromium; a verificação no Safari precisa ser feita separadamente em um iPhone.
+**4. Agenda de cuidados (1 min).** Abra **Agenda**, crie um cuidado, marque como concluído e reabra. Recarregue a tela para mostrar a persistência no mesmo navegador.
 
-## Precauções
+**5. Rede de Apoio e empresas (1 min).** Mostre o diretório de estabelecimentos com contato público e busca por proximidade quando autorizada. Abra o cadastro de empresa; explique que um perfil cadastrado só aparece após aprovação administrativa, sem confundir aprovação local com validação jurídica ou parceria contratual.
 
-- **Nunca** confunda anúncios de demonstração com ocorrências reais. A Home avisa que são registros de teste.
-- Ao redefinir os dados, o modo local esvazia animais, alertas, empresas, denúncias e fotos deste navegador. A operação não é reversível.
-- WhatsApp pode ser incluído no cartaz apenas se o tutor cadastrou e autorizou o telefone, e depois habilitou explicitamente sua exibição na imagem.
-- Não existem chat persistente entre usuários, notificação push, integração centralizada de empresas, confirmação jurídica dos estabelecimentos ou e-mail transacional.
-- Não há garantia de funcionamento offline dos mapas externos. O mapa tem alternativa textual.
+**6. Administração (1 min 30 s).** Entre como administrador. Abra **Administração → Empresas** e mostre aprovação/recusa com justificativa; apresente também denúncias e moderação. Em seguida, abra **Meus animais** ou **Meu pet sumiu** para evidenciar que o administrador também atua como tutor.
+
+**7. Engenharia de Software (45 s).** Mostre a separação em módulos (`pet-poster.js`, `pet-matching.js`, `local-preview.js`, `permissions.js`), GitHub e os workflows de verificação. Explique que testes não tornam a solução automaticamente apta para produção real.
+
+## Resumo do que dizer sobre a arquitetura
+
+> "O BuscaPet é uma SPA em JavaScript com Vite. Nesta entrega, os cadastros e as imagens ficam no navegador e demonstram os fluxos de tutor, empresa e administrador. O projeto também possui uma base de integração com Supabase para evolução, mas a versão publicada não compartilha informações entre dispositivos. Nossos testes automatizados verificaram sintaxe, funcionalidades e responsividade em Chromium."
+
+Esta é uma explicação tecnicamente correta e não promete recursos inexistentes.
+
+## Checklist antes da avaliação
+
+- [x] Sintaxe, testes e build aprovados nos workflows de 19/11/2026.
+- [x] Homologação em Chromium com larguras de 320, 390, 768 e 1440 px.
+- [x] Verificação automatizada de perfis tutor/administrador/empresa e fluxos representativos.
+- [x] Confirmação da publicação `READY` em 24/11/2026, SHA funcional `2507a68`.
+- [ ] Teste manual de Safari/iPhone para foto, teclado e salvamento do cartaz; **não há evidência de teste físico concluído**.
+- [ ] Ensaio da apresentação, sem reinicializar o armazenamento local.
+- [ ] Confirmar o trabalho e a documentação finais enviados ao professor, incluindo a versão correta do repositório.
+
+**Evidências de CI:** [sintaxe, testes e build](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445999) · [homologação visual](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445883). Essas execuções verificaram o código anterior à revisão exclusivamente documental.
+
+## Perguntas a preparar
+
+Priorize: quatro atividades da Engenharia de Software; requisitos funcionais/não funcionais; coesão versus acoplamento; arquitetura SPA; permissões por papel; critério de correspondência; testes; distinção entre localStorage/IndexedDB e PostgreSQL; limites de segurança do frontend. Estude em [Perguntas de Engenharia de Software](PERGUNTAS_ENGENHARIA_PI2.md).
+
+**Dossiê técnico:** [Entrega do Projeto Integrador II](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md).

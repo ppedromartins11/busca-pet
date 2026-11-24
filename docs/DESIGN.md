@@ -1,5 +1,7 @@
 # Direção visual — Sprint 1
 
+> **Registro histórico — não é o roteiro ou a arquitetura vigente da apresentação de 24/11/2026.** Este arquivo documenta uma etapa anterior ou decisões de desenvolvimento. Para o Projeto Integrador II, use [o dossiê atual](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), [o roteiro de apresentação](ROTEIRO_APRESENTACAO_ATUAL.md) e [a matriz atualizada](MATRIZ_RASTREABILIDADE.md). A publicação atual é um frontend Vite com persistência local; não pressupor Supabase implantado, credenciais antigas, estados de tela, contagens de testes ou sprints descritos abaixo como sendo a versão atual. O registro original foi mantido para rastreabilidade.
+
 ## Processo aplicado
 
 O comando solicitado `npx skills use "https://github.com/anthropics/skills" --skill "frontend-design"` foi executado, com saída integral lida. As instruções orientaram planejamento, implementação e inspeção visual. O código final não depende dessa ferramenta para funcionar.

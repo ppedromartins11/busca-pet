@@ -1,5 +1,7 @@
 # BuscaPet — homologação do MVP em 21/10/2026
 
+> **Referência histórica ou de evolução futura, não descrição da publicação atual do Projeto Integrador II.** Preserve estas informações como registro técnico da etapa em que foram escritas. Em 24/11/2026 o BuscaPet publicado utiliza armazenamento local no navegador; o dossiê vigente é [Entrega do Projeto Integrador II](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), com [arquitetura atual](ARQUITETURA.md), [matriz](MATRIZ_RASTREABILIDADE.md) e [testes](TESTES.md). Não pressupor aplicação remota de migrations, segurança RLS homologada, serviços Cloudflare implantados ou testes de backend nesta versão.
+
 ## Resultado
 
 O modo conectado da SPA foi exercitado contra `jpnvizdhyrvliqgvyxzx` com identidades sintéticas independentes. A rodada completa `60932773-7b66-4e09-9a4b-3eb7d878ca9d` aprovou 9 grupos de testes: perfil e isolamento, animais, ocorrências públicas e privadas, papéis e suspensão, avistamentos e coordenadas, Storage privado, publicação autorizada de foto, exclusão e navegação autenticada. O manifesto local fica em `.tmp/remote-mvp-<id>.json` (ignorado pelo Git, sem senhas). A limpeza terminou sem erro; auditoria posterior por Auth Admin e Storage encontrou zero usuários e arquivos sintéticos residuais. Os animais e registros dependentes são eliminados pelas FKs `ON DELETE CASCADE` da migration. SELECT SQL direto dessas tabelas não estava disponível para a chave `service_role` deste projeto nem pelo conector.
