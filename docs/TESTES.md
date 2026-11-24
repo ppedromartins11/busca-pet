@@ -1,4 +1,60 @@
-# Verificação do protótipo 0.5 — 07/10/2026
+# Testes do BuscaPet — entrega do Projeto Integrador II
+
+**Referência atual:** 24/11/2026 · **baseline funcional:** `2507a68` · **frontend em produção:** Vite `presentation`.
+
+Os resultados de 30 ou 38 testes do protótipo v0.5, registrados anteriormente, **não são a métrica da versão apresentada**. O histórico integral permanece ao final.
+
+## Evidências realmente disponíveis
+
+| Verificação | Evidência consultada | O que comprova |
+|---|---|---|
+| Instalação e sintaxe | Workflow [44581445999](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445999) — sucesso | `npm ci`, `npm run check` |
+| Suíte de testes de unidade/regressão | Mesmo workflow — sucesso | `npm test` no SHA do PR funcional |
+| Build de verificação | Mesmo workflow — sucesso | `npm run build` |
+| Build estático de apresentação | Workflow [44581445883](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445883) — sucesso | `npm run build:presentation` |
+| Navegação Chromium e permissões | Workflow [44581445883](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445883) — sucesso | Jornadas de visitante, tutor, admin e empresa; sem erros de console capturados nos casos exercitados |
+| Layout em múltiplas larguras | `tests/presentation-homologation.browser.cjs` no workflow aprovado | Sem rolagem horizontal detectada em **320, 390, 768 e 1440 px** |
+| Publicação | Vercel `READY`, SHA `2507a68`, verificado em 24/11/2026 | A versão estática de apresentação está acessível no domínio publicado |
+
+Os workflows acima foram executados sobre o código revisado **antes** destas alterações de documentação. Não afirmar “cobertura de 100%”, “zero bugs”, teste Safari físico ou homologação PostgreSQL/RLS porque não há evidência dessas garantias.
+
+## O que os testes cobrem e como repetir
+
+Os arquivos `tests/presentation-*.test.cjs`, `tests/pet-poster-matching.test.mjs` e `tests/nearby-services.test.mjs` exercitam regras como:
+- cadastro/edição de pets, empresas e permissões;
+- cartaz, texto do contato e comparação entre alertas;
+- carteirinha, agenda, estado de compromisso e isolamento por usuário local;
+- fotos, registros de avistamento, denúncia, proteção dos dados locais e regressões;
+- serviços comerciais e busca de estabelecimentos sob consulta pública.
+
+`tests/presentation-homologation.browser.cjs` exercita rotas e fluxos automatizados no Chromium, incluindo ações com usuários diferentes **no mesmo navegador**. Isso não comprova colaboração real entre dispositivos.
+
+Com Node.js 22 ou superior:
+```bash
+npm ci
+npm run check
+npm test
+npm run build:presentation
+npm run preview -- --host 127.0.0.1 --port 5186
+```
+
+Em outro terminal, com Chromium/Chrome instalado:
+```bash
+BASE_URL=http://127.0.0.1:5186 node tests/presentation-homologation.browser.cjs
+```
+
+Alternativamente, confira o workflow `.github/workflows/homologacao-apresentacao.yml`.
+
+## Limitações dos resultados
+
+Não há evidência de ensaio manual com Safari físico, leitor de tela, testes de estresse ou proteção em servidor. O app publicado permanece em armazenamento local; testes de RLS no modo Supabase pertencem a outra arquitetura e não sustentam conclusões sobre a implantação atual.
+
+Leia o [dossiê da entrega](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md) e a [matriz](MATRIZ_RASTREABILIDADE.md).
+
+---
+
+## Anexo histórico — protótipo 0.5, outubro/2026
+
 
 ## Referência anterior
 
