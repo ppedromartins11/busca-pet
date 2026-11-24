@@ -1,4 +1,51 @@
-# Arquitetura do BuscaPet — transição para Sprint 2
+# Arquitetura do BuscaPet — estado publicado em 24/11/2026
+
+Este é o estado da **versão acadêmica do Projeto Integrador II**, servida em `https://busca-pet-delta.vercel.app/`. A baseline funcional é `2507a68`. A descrição histórica da Sprint 2 permanece integralmente no anexo abaixo, mas não descreve a implantação usada na apresentação.
+
+## Visão de implantação efetiva
+
+```mermaid
+flowchart TD
+    Usuario[Visitante / tutor / empresa / administrador] --> Vercel[Frontend SPA estático na Vercel]
+    Vercel --> App[BPRealApp: telas e rotas]
+    App --> Identity[BPAuth: implementação de apresentação]
+    App --> Store[BPRemoteStore: adaptador de apresentação]
+    Store --> Local[localStorage: registros e contas]
+    Store --> Photos[IndexedDB: fotografias locais]
+    App --> Maps[OSM / Google Maps: informações externas]
+```
+
+O comando `npm run build:presentation` gera o frontend estático. `src/local-preview.js` disponibiliza implementações locais dos contratos `BPAuth` e `BPRemoteStore`, e `src/events.js` monta a `BPRealApp`. O frontend pode receber outra implementação desses contratos em uma etapa posterior; isso não significa que use banco remoto nesta entrega.
+
+## Módulos e responsabilidades verificadas
+
+| Arquivo | Responsabilidade da versão acadêmica |
+|---|---|
+| `src/main.js` | Importações e ordem de inicialização |
+| `src/events.js` | Inicialização e listeners globais |
+| `src/real-app.js` | Telas, navegação, formulários e composição da UI |
+| `src/local-preview.js` | Persistência local, contas, perfis, validação e verificação de propriedade |
+| `src/permissions.js` | Autorização por papel/ação no cliente |
+| `src/pet-poster.js` | Construção do cartaz no Canvas |
+| `src/pet-matching.js` | Comparação pontuada de alertas por características |
+| `src/nearby-services.js` | Diretório público e consulta de serviços próximos |
+| `src/search-map.js` | Exibição e interação de regiões aproximadas |
+| `src/images.js`, `src/views.js` | Reuso de recursos de imagem e apresentação |
+
+## Regras de domínio e limites arquiteturais
+
+**Regra de propriedade:** tutor, administrador e empresa podem ter pets próprios; operações de escrita local verificam identidade e dono dos registros. **Empresas:** cadastro pendente → aprovação por admin → exibição na Rede de Apoio; editar informações após aprovação retorna à análise. **Cartaz:** dados públicos e WhatsApp somente com consentimento do titular. **Correspondências:** alertas públicos ativos de tipos opostos, com justificativas e ordenação; não identifica animais por reconhecimento visual.
+
+`localStorage` não fornece transações ACID nem colaboração entre navegadores. As verificações de permissão no frontend ajudam a demonstrar regras de negócio, mas **não são uma barreira de segurança contra manipulação local**. Uma implantação pública exigiria Auth de servidor, banco compartilhado, controle RLS, tratamento de dados pessoais e testes com identidades reais distintas.
+
+**Manutenibilidade:** arquivos especializados mostram coesão por responsabilidade, mas `real-app.js` continua extenso e existem interfaces via `window`. Trate isso como dívida técnica, não como demonstração de SOLID/MVC em sentido integral.
+
+**Evidências:** [dossiê da entrega](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md) e [perguntas de defesa](PERGUNTAS_ENGENHARIA_PI2.md).
+
+---
+
+## Anexo histórico — transição para Sprint 2
+
 
 ## Visão geral
 
