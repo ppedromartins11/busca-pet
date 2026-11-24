@@ -1,29 +1,51 @@
 # BuscaPet
 
-## Versão atual para apresentação — 19/11/2026
+Aplicação web de apoio à divulgação e ao acompanhamento de animais desaparecidos e encontrados, com recursos para tutores, empresas pet e administração.
 
-A versão publicada em **https://busca-pet-delta.vercel.app/** utiliza o build de apresentação da branch `apresentacao-contas-2026-11-19`. O código possui uma segunda versão conectada ao Supabase, mas **a apresentação publicada não utiliza banco remoto**.
+## Entrega atual — Projeto Integrador II (24/11/2026)
 
-**O que demonstrar:** feed e mapa de alertas, cadastro de animais, fotos, avistamentos, cartaz para divulgação, correspondências entre animais, carteirinha digital, agenda de cuidados, Rede de Apoio, cadastro e moderação de empresas, moderação de publicações e painel administrativo. O administrador também pode cadastrar animais e publicar alertas. Empresas podem manter perfil comercial e atuar como tutor.
+- **Aplicação:** https://busca-pet-delta.vercel.app/
+- **Branch de apresentação:** `apresentacao-contas-2026-11-19`
+- **Baseline funcional confirmada:** `2507a68ec1dcaa3bd6b6f3ba4cd8e87f667e36e2`
+- **Frontend:** SPA JavaScript/Vite, HTML e CSS
+- **Persistência efetivamente publicada:** `localStorage` e `IndexedDB` do navegador — **sem Supabase ativo nessa versão**.
 
-**Acesso de demonstração:** `tutor@buscapet.test` ou `admin@buscapet.test`, senha `BuscaPet@2026`. A conta empresarial é criada pela rota `#cadastro-empresa` e precisa de aprovação do administrador antes de aparecer no diretório local.
+**Funcionalidades demonstráveis:** login/cadastro local; tutores, empresas e administradores; cadastro de animais e fotos; alertas de perda/encontro; mapa e avistamentos; cartaz PNG; correspondências por características; carteirinha; agenda; serviços veterinários/pet shops; vitrine de empresas após aprovação; moderação e denúncias. O administrador também pode cadastrar animais e publicar alertas próprios.
 
-**Limite operacional:** contas, fotos e alterações ficam somente no navegador onde foram criadas. Outra pessoa usando outro celular não verá os registros locais. Os anúncios iniciais são dados de apresentação; não representam desaparecimentos reais. Não utilizar informações particulares, senhas pessoais, endereços residenciais ou fotos sem autorização. WhatsApp e sites comerciais são links externos.
+**Limites:** dados não são sincronizados entre aparelhos; não há chat interno compartilhado, autenticação segura de servidor, antispam robusto ou e-mail transacional. Os animais e alertas previamente preenchidos são registros de demonstração. Não use dados pessoais, fotos sem autorização nem senhas particulares nesse modo.
 
-### Executar e conferir
+### Como executar e verificar
+
+Requer Node.js 22 ou superior:
 
 ```bash
 npm ci
-npm run preview:local
-# Em outro terminal:
 npm run check
 npm test
 npm run build:presentation
+npm run preview -- --host 127.0.0.1 --port 5186
 ```
 
-O teste visual automatizado `tests/presentation-homologation.browser.cjs` usa Chromium/Chrome e uma instância local do build de apresentação na porta 5186. A verificação de CI está no workflow `.github/workflows/homologacao-apresentacao.yml`. Leia [Roteiro atual de apresentação](docs/ROTEIRO_APRESENTACAO_ATUAL.md) antes de avaliar o sistema.
+Abra `http://127.0.0.1:5186/#home`. Para edição contínua em modo local, utilize `npm run preview:local`. O workflow de navegador usa Chromium com o build de apresentação na porta 5186. Os testes de integração com Supabase pertencem a outro modo e não podem ser usados como evidência de produção nesta versão.
 
-**Documentação a seguir:** as notas sobre protótipo legado, configuração remota e entregas de outubro são registros históricos e não substituem as instruções desta versão de apresentação.
+**Contas de avaliação (somente modo local):** `tutor@buscapet.test` / `BuscaPet@2026`; `admin@buscapet.test` / `BuscaPet@2026`. Empresas criam conta comercial pelo site e dependem de aprovação administrativa no mesmo navegador. As credenciais de avaliação não aparecem mais no login.
+
+### Documentação acadêmica principal
+
+1. [Dossiê de entrega do Projeto Integrador II](docs/ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md).
+2. [Roteiro atualizado para apresentação](docs/ROTEIRO_APRESENTACAO_ATUAL.md).
+3. [Perguntas e respostas de Engenharia de Software](docs/PERGUNTAS_ENGENHARIA_PI2.md).
+4. [Matriz de requisitos e rastreabilidade](docs/MATRIZ_RASTREABILIDADE.md).
+5. [Arquitetura e limites de implantação](docs/ARQUITETURA.md).
+6. [Testes e resultados](docs/TESTES.md).
+
+**Evidências:** [check, testes e build](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445999) · [homologação em Chromium](https://github.com/ppedromartins11/busca-pet/actions/runs/44581445883). Execuções de 19/11/2026, antes da revisão de documentação. A publicação foi confirmada em 24/11/2026.
+
+---
+
+## Registro histórico de desenvolvimento e integração
+
+O conteúdo abaixo foi preservado como registro das versões anteriores. **Não é a instrução operacional para a apresentação atual**: pode mencionar rotas, ambientes, métricas, credenciais de protótipo antigo ou integrações remotas sem homologação. Os documentos acadêmicos acima são a referência vigente.
 
 
 SPA em JavaScript e Vite para publicar e acompanhar buscas por animais. O modo conectado usa Supabase Auth, PostgreSQL com RLS e o bucket privado `pet-media`. A homologação online isolada ainda não está configurada. **Não copie valores de `.env` para uma demonstração nem aponte testes para produção.** Em build de produção sem as duas variáveis do Supabase, a aplicação mostra uma mensagem de configuração e não abre o protótipo local.
