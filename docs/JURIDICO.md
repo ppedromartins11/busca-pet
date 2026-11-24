@@ -1,5 +1,7 @@
 # Aspectos jurídicos do BuscaPet
 
+> **Referência histórica ou de evolução futura, não descrição da publicação atual do Projeto Integrador II.** Preserve estas informações como registro técnico da etapa em que foram escritas. Em 24/11/2026 o BuscaPet publicado utiliza armazenamento local no navegador; o dossiê vigente é [Entrega do Projeto Integrador II](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), com [arquitetura atual](ARQUITETURA.md), [matriz](MATRIZ_RASTREABILIDADE.md) e [testes](TESTES.md). Não pressupor aplicação remota de migrations, segurança RLS homologada, serviços Cloudflare implantados ou testes de backend nesta versão.
+
 Material acadêmico, consultado em 25/09/2026. Não equivale a parecer jurídico nem a declaração de conformidade integral. Os textos em `BPLegal`, definidos em `src/legal.js`, descrevem esta demonstração local.
 
 ## Responsabilidade e termos
