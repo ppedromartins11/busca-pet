@@ -1,5 +1,7 @@
 # Sprint 2.2 — preflight da implantação remota
 
+> **Referência histórica ou de evolução futura, não descrição da publicação atual do Projeto Integrador II.** Preserve estas informações como registro técnico da etapa em que foram escritas. Em 24/11/2026 o BuscaPet publicado utiliza armazenamento local no navegador; o dossiê vigente é [Entrega do Projeto Integrador II](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), com [arquitetura atual](ARQUITETURA.md), [matriz](MATRIZ_RASTREABILIDADE.md) e [testes](TESTES.md). Não pressupor aplicação remota de migrations, segurança RLS homologada, serviços Cloudflare implantados ou testes de backend nesta versão.
+
 **Atualização:** o bloqueio de ingresso foi tratado localmente em
 `docs/SPRINT2_2_INGRESS.md`. A implementação agora usa Worker, Durable Object,
 HMAC e nonce transacional. As referências abaixo a Turnstile e IP diretamente
