@@ -1,5 +1,8 @@
 # BuscaPet — verificação acadêmica final
 
+> **Relatório histórico de 16/11/2026.** Não utilizar o SHA, resultados quantitativos, prazo, branch de entrega ou supostas pendências abaixo como estado atual. O sistema apresentado em 24/11/2026 corresponde à baseline funcional `2507a68`, com build estático de apresentação e armazenamento no navegador. A avaliação atual está no [dossiê do PI2](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md) e os resultados vigentes em [TESTES.md](TESTES.md). Este relatório foi preservado como evidência de uma revisão anterior, não apagado ou reescrito retroativamente.
+
+
 **Data:** 16/11/2026 (America/Cuiaba). **Prazo:** 20/11/2026. **Escopo:** checkout local, foco nas jornadas principais e evidências do semestre. Este relatório não certifica o serviço conectado. A [matriz de rastreabilidade](MATRIZ_RASTREABILIDADE.md) classifica cada RF01–RF16 e RNF01–RNF09.
 
 ## 1. Fonte e baseline
