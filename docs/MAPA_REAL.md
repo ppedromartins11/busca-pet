@@ -1,5 +1,7 @@
 # Mapa real — implantação e segurança
 
+> **Referência histórica ou de evolução futura, não descrição da publicação atual do Projeto Integrador II.** Preserve estas informações como registro técnico da etapa em que foram escritas. Em 24/11/2026 o BuscaPet publicado utiliza armazenamento local no navegador; o dossiê vigente é [Entrega do Projeto Integrador II](ENTREGA_PROJETO_INTEGRADOR_II_2026-11-24.md), com [arquitetura atual](ARQUITETURA.md), [matriz](MATRIZ_RASTREABILIDADE.md) e [testes](TESTES.md). Não pressupor aplicação remota de migrations, segurança RLS homologada, serviços Cloudflare implantados ou testes de backend nesta versão.
+
 ## Implementação
 
 A migration incremental `20261021224002_public_search_map.sql` cria três tabelas PostGIS com RLS e índices GiST: `occurrence_public_locations` (áreas de desaparecimento), `sighting_public_locations` (áreas propostas por quem avistou, com consentimento e aprovação separada do tutor) e `partner_public_locations` (local comercial consentido de parceiro aprovado). Pontos de ocorrências e avistamentos são escolhidos deliberadamente no mapa, arredondados a duas casas decimais e exibidos com raio mínimo de 800 m; a interface usa 900 m. Nenhuma coordenada privada é copiada de `buscapet_private.sighting_locations`.
